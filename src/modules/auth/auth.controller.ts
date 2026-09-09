@@ -1,0 +1,55 @@
+import type { Request, Response, NextFunction } from "express";
+import { registerSchema, loginSchema } from "./auth.schema";
+import * as authService from "./auth.service";
+
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 hari, samakan dengan expiresIn token
+
+function isWebClient(req: Request) {
+  return req.headers["x-client-type"] === "web";
+}
+
+export async function register(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = registerSchema.parse(req.body);
+    const user = await authService.registerKlien(input);
+    const token = authService.issueToken(user);
+
+    if (isWebClient(req)) {
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: COOKIE_MAX_AGE,
+      });
+      return res.status(201).json({ data: { role: user.role } });
+    }
+    return res.status(201).json({ data: { token, role: user.role } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function login(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = loginSchema.parse(req.body);
+    const { token, role } = await authService.login(input);
+
+    if (isWebClient(req)) {
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: COOKIE_MAX_AGE,
+      });
+      return res.json({ data: { role } });
+    }
+    return res.json({ data: { token, role } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function logout(req: Request, res: Response) {
+  res.clearCookie("token");
+  res.json({ data: "ok" });
+}

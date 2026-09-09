@@ -1,0 +1,142 @@
+erDiagram
+    USERS ||--o| KLIEN_PROFILES : "punya"
+    USERS ||--o| PT_PROFILES : "punya"
+    USERS ||--o| ADMIN_PROFILES : "punya"
+    PT_PROFILES ||--o{ KLIEN_PROFILES : "melatih"
+    KLIEN_PROFILES ||--o{ PAIRING_REQUESTS : "mengajukan"
+    PT_PROFILES ||--o{ PAIRING_REQUESTS : "menerima"
+    KLIEN_PROFILES ||--o{ WEIGHT_LOGS : "mencatat"
+    KLIEN_PROFILES ||--o{ PROGRESS_CYCLES : "menjalani"
+    KLIEN_PROFILES ||--o{ WEEKLY_PLANS : "memiliki"
+    KLIEN_PROFILES ||--o{ ACTIVITY_LOGS : "mencatat"
+    KLIEN_PROFILES ||--o{ MEAL_LOGS : "mencatat"
+    WEEKLY_PLANS ||--o{ ACTIVITY_LOGS : "referensi"
+    WEEKLY_PLANS ||--o{ MEAL_LOGS : "referensi"
+    MASTER_OLAHRAGA ||--o{ ACTIVITY_LOGS : "referensi"
+    MASTER_MAKANAN ||--o{ MEAL_LOGS : "referensi"
+    KLIEN_PROFILES ||--o{ FEEDBACKS : "menerima"
+    PT_PROFILES ||--o{ FEEDBACKS : "memberikan"
+    USERS ||--o{ ADMIN_ACTIVITY_LOGS : "melakukan"
+
+    USERS {
+        int id PK
+        string email UK
+        string username UK
+        string password_hash
+        enum role "klien, pt, admin"
+        enum tema "siang, malam"
+        datetime created_at
+        datetime updated_at
+    }
+    KLIEN_PROFILES {
+        int id PK
+        int user_id FK
+        string nama
+        int usia
+        enum jenis_kelamin
+        text alergi_makanan
+        float tinggi_badan_cm
+        int pt_id FK "nullable, PT aktif saat ini"
+    }
+    PROGRESS_CYCLES {
+        int id PK
+        int klien_id FK
+        float bb_awal_kg "snapshot BB saat cycle dimulai"
+        float bb_tujuan_kg
+        enum tujuan "turun_bb, naik_bb"
+        int durasi_hari "informasi target waktu, bukan trigger tutup paksa"
+        int target_kalori_per_hari
+        enum status "aktif, selesai"
+        date tanggal_mulai
+        date tanggal_selesai "nullable, diisi saat goal tercapai"
+    }
+    PT_PROFILES {
+        int id PK
+        int user_id FK
+        string nama
+        int usia
+        enum jenis_kelamin
+        enum spesialisasi "turun_bb, naik_bb"
+        string tempat_gym "lokasi mengajar, wajib diisi PT, dipakai AI untuk jadwal latihan"
+    }
+    ADMIN_PROFILES {
+        int id PK
+        int user_id FK
+        string nama
+    }
+    PAIRING_REQUESTS {
+        int id PK
+        int klien_id FK
+        int pt_id FK
+        enum status "pending, diterima, ditolak"
+        text alasan_penolakan "nullable"
+        datetime created_at
+    }
+    WEIGHT_LOGS {
+        int id PK
+        int klien_id FK
+        float berat_badan_kg
+        date tanggal
+    }
+    WEEKLY_PLANS {
+        int id PK
+        int klien_id FK
+        date minggu_mulai
+        json workout_plan "termasuk lokasi dari pt_profiles.tempat_gym"
+        json meal_plan
+        enum status "pending_review, disetujui, override"
+        datetime generated_at
+        datetime reviewed_at "nullable"
+    }
+    MASTER_OLAHRAGA {
+        int id PK
+        string nama UK
+        float met_value "buat rumus kalori"
+        enum kategori "kardio, kekuatan, fleksibilitas"
+        boolean butuh_jarak "true jika field jarak tampil di UI"
+        datetime created_at
+    }
+    MASTER_MAKANAN {
+        int id PK
+        string nama UK
+        float kalori_per_100g
+        enum kategori "karbohidrat, protein, sayur, lainnya"
+        enum sumber "seed, ai_generated"
+        datetime created_at
+    }
+    ACTIVITY_LOGS {
+        int id PK
+        int klien_id FK
+        int weekly_plan_id FK "nullable"
+        int olahraga_id FK "referensi master_olahraga"
+        int durasi_menit
+        float jarak_meter "nullable, hanya jika butuh_jarak"
+        int kalori_terbakar "hasil MET x BB x jam"
+        date tanggal
+    }
+    MEAL_LOGS {
+        int id PK
+        int klien_id FK
+        int weekly_plan_id FK "nullable"
+        int makanan_id FK "referensi master_makanan"
+        float porsi_gram
+        int kalori_masuk "hasil kalori_per_100g x porsi/100"
+        date tanggal
+    }
+    FEEDBACKS {
+        int id PK
+        int klien_id FK
+        int pt_id FK "nullable, null jika dari AI"
+        enum source "ai, pt"
+        text pesan
+        text balasan_klien "nullable, hanya 1x"
+        boolean dibaca
+        datetime created_at
+    }
+    ADMIN_ACTIVITY_LOGS {
+        int id PK
+        int admin_id FK
+        string aksi
+        int target_user_id FK "nullable"
+        datetime created_at
+    }
