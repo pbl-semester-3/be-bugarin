@@ -5,11 +5,9 @@
 import { db } from "../src/config/db";
 import { masterOlahraga } from "../src/db/schema/master-olahraga";
 import { masterMakanan } from "../src/db/schema/master-makanan";
-import { sql } from "drizzle-orm";
 
 // Nilai MET (Metabolic Equivalent of Task) berikut adalah estimasi umum dari referensi
-// kesehatan publik yang dikenal luas — cocok untuk kalkulasi kalori perkiraan di MVP,
-// bukan angka klinis presisi. Boleh disesuaikan tim seiring pengembangan.
+// kesehatan publik yang dikenal luas — cocok untuk kalkulasi kalori perkiraan di MVP
 const olahragaSeed = [
   { nama: "Jalan Kaki", metValue: 3.5, kategori: "kardio" as const, butuhJarak: true },
   { nama: "Lari / Jogging", metValue: 8.0, kategori: "kardio" as const, butuhJarak: true },
@@ -22,7 +20,6 @@ const olahragaSeed = [
 ];
 
 // Estimasi kalori per 100g — starting point, akan bertambah dinamis dari input klien
-// (sumber = ai_generated) sesuai desain di bugarin_schema_notes.md bab 5.
 const makananSeed = [
   { nama: "Nasi", kaloriPer100g: 130, kategori: "karbohidrat" as const },
   { nama: "Ayam", kaloriPer100g: 165, kategori: "protein" as const },
