@@ -21,12 +21,17 @@ export async function estimateFoodCalories(
     generationConfig: { responseMimeType: "application/json", responseSchema: foodEstimationSchema },
   });
 
-  const result = await model.generateContent(`Estimasi kalori per 100 gram untuk: ${namaMakanan}`);
-  const parsed = JSON.parse(result.response.text()) as { kaloriPer100g: number; kategori: Kategori };
+  try {
+    const result = await model.generateContent(`Estimasi kalori per 100 gram untuk: ${namaMakanan}`);
+    const parsed = JSON.parse(result.response.text()) as { kaloriPer100g: number; kategori: Kategori };
 
-  // Validasi rentang wajar — WAJIB, jangan percaya angka mentah dari AI (mitigasi hallucination).
-  if (parsed.kaloriPer100g < 0 || parsed.kaloriPer100g > 900) {
+    // Validasi rentang wajar — WAJIB, jangan percaya angka mentah dari AI (mitigasi hallucination).
+    if (parsed.kaloriPer100g < 0 || parsed.kaloriPer100g > 900) {
+      return { kaloriPer100g: 150, kategori: "lainnya" };
+    }
+    return parsed;
+  } catch (error) {
+    console.error("AI estimation error, applying fallback:", error);
     return { kaloriPer100g: 150, kategori: "lainnya" };
   }
-  return parsed;
 }

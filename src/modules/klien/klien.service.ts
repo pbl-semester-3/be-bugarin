@@ -323,8 +323,10 @@ export const klienService = {
           resolvedNamaMakanan = searchNama;
           kaloriPer100g = estimated.kaloriPer100g;
         } catch (error) {
-          const err = error as { code?: string; errno?: number };
-          if (err.code === 'ER_DUP_ENTRY' || err.errno === 1062) {
+          const err = error as { code?: string; errno?: number; cause?: { code?: string; errno?: number } };
+          const code = err.code || err.cause?.code;
+          const errno = err.errno || err.cause?.errno;
+          if (code === 'ER_DUP_ENTRY' || errno === 1062) {
             const existing = await db.query.masterMakanan.findFirst({
               where: sql`LOWER(${masterMakanan.nama}) = LOWER(${searchNama})`
             });
