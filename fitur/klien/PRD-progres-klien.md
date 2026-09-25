@@ -6,7 +6,7 @@
 |---|---|
 | **Role** | Klien |
 | **Branch** | `feat/progres-klien` |
-| **Status** | Sub-bab A: **Approved** — Sub-bab B: **Approved** — Sub-bab C: Draft |
+| **Status** | Sub-bab A: **Approved** — Sub-bab B: **Approved** — Sub-bab C: **Approved** |
 | **PRD Induk** | `Bugarin_PRD_Backend_AI.md` bab 4.1 |
 
 ## Referensi

@@ -6,7 +6,7 @@
 |---|---|
 | **Role** | Klien |
 | **Branch** | `feat/dashboard-klien` |
-| **Status** | Draft — menunggu review |
+| **Status** | Approved — siap implementasi |
 | **PRD Induk** | `Bugarin_PRD_Backend_AI.md` bab 4.1 |
 
 ## Referensi

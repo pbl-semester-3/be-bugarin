@@ -6,7 +6,7 @@
 |---|---|
 | **Role** | Klien (konsumen), PT (sisi terima/tolak — diimplementasikan di branch PT) |
 | **Branch** | `feat/pt-ku-klien` |
-| **Status** | Draft — menunggu review |
+| **Status** | Approved — siap implementasi |
 | **PRD Induk** | `Bugarin_PRD_Backend_AI.md` bab 4.1 & 4.2 |
 
 ## Referensi
