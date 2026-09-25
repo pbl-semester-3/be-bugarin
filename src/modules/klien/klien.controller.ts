@@ -7,7 +7,8 @@ import {
   weightLogSchema, 
   newCycleSchema,
   createActivityLogSchema,
-  createMealLogSchema
+  createMealLogSchema,
+  sendPairingRequestSchema
 } from "./klien.schema";
 
 export const klienController = {
@@ -127,4 +128,27 @@ export const klienController = {
       next(error);
     }
   },
+
+  async sendPairingRequest(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const parsedData = sendPairingRequestSchema.parse(req.body);
+      const data = await klienService.sendPairingRequest(userId, parsedData);
+      res.status(201).json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getCurrentPairingRequest(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await klienService.getCurrentPairingRequest(userId);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  }
 };

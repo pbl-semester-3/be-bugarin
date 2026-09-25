@@ -1,9 +1,9 @@
-import { createApp } from "./src/app";
-import { db } from "./src/config/db";
-import { users, klienProfiles, weightLogs, masterOlahraga, masterMakanan, weeklyPlans, activityLogs, mealLogs, progressCycles } from "./src/db/schema";
+import { createApp } from "../../src/app";
+import { db } from "../../src/config/db";
+import { users, klienProfiles, weightLogs, masterOlahraga, masterMakanan, weeklyPlans, activityLogs, mealLogs, progressCycles } from "../../src/db/schema";
 import { eq, sql, desc, and } from "drizzle-orm";
 import jwt from "jsonwebtoken";
-import { env } from "./src/config/env";
+import { env } from "../../src/config/env";
 
 const PORT = 9999;
 

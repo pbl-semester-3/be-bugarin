@@ -16,6 +16,7 @@ export function authGuard(allowedRoles: Role[]): RequestHandler {
       if (!allowedRoles.includes(decoded.role)) {
         return next(new AppError(403, "Forbidden"));
       }
+      
       req.user = { id: decoded.sub, role: decoded.role };
       next();
     } catch {
