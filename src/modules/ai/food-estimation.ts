@@ -16,7 +16,7 @@ export async function estimateFoodCalories(
   namaMakanan: string
 ): Promise<{ kaloriPer100g: number; kategori: Kategori }> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-flash-latest",
     systemInstruction: "Kamu adalah asisten estimasi nilai gizi makanan Indonesia.",
     generationConfig: { responseMimeType: "application/json", responseSchema: foodEstimationSchema },
   });

@@ -11,7 +11,7 @@ const feedbackSchema = {
 // (kalori masuk/keluar, tren BB) — lihat Bugarin_PRD_Backend_AI.md bab 6.2.
 export async function generateRealtimeFeedback(context: string): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-flash-latest",
     systemInstruction:
       "Kamu adalah AI health coach yang suportif dan singkat. Maksimal 2 kalimat. " +
       "Tidak memberi saran medis spesifik.",
