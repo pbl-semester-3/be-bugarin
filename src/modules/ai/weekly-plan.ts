@@ -48,7 +48,7 @@ export async function generateWeeklyPlan(input: {
   tempatGym: string; // disisipkan ke hasil setelah parse, TIDAK diminta ke AI
 }): Promise<{ workoutPlan: WorkoutPlanItem[]; mealPlan: MealPlanItem[] }> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-flash-latest",
     systemInstruction:
       "Kamu adalah asisten perencana program kebugaran. Susun jadwal latihan 2-3 hari/minggu " +
       "dan rencana makan harian. JANGAN sarankan makanan yang mengandung alergi yang disebutkan.",
