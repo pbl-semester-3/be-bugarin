@@ -1,11 +1,19 @@
 import { Router } from "express";
 import { authGuard } from "../../middlewares/auth-guard";
+import { klienController } from "./klien.controller";
 
 const router = Router();
 
-// TODO: implementasikan seluruh endpoint sesuai Bugarin_PRD_Backend_AI.md bab 4.1
-// (profile, weight-logs, progress-cycles, pairing-requests, dashboard-summary,
-// weekly-plan, activity-logs, meal-logs, feedbacks). Pola: routes -> controller -> service.
+// Endpoint Profil & Onboarding
+router.get("/profile", authGuard(["klien"]), klienController.getProfile);
+router.put("/profile", authGuard(["klien"]), klienController.updateProfile);
+router.put("/password", authGuard(["klien"]), klienController.changePassword);
+router.put("/theme", authGuard(["klien"]), klienController.changeTheme);
+
+// Endpoint Siklus Progres & Weight Log
+router.post("/weight-logs", authGuard(["klien"]), klienController.addWeightLog);
+router.get("/progress-cycles", authGuard(["klien"]), klienController.getProgressCycles);
+router.post("/progress-cycles", authGuard(["klien"]), klienController.startNewProgressCycle);
 
 router.get("/ping", authGuard(["klien"]), (req, res) => {
   res.json({ data: `klien ${req.user?.id} ok` });
