@@ -15,6 +15,11 @@ router.post("/weight-logs", authGuard(["klien"]), klienController.addWeightLog);
 router.get("/progress-cycles", authGuard(["klien"]), klienController.getProgressCycles);
 router.post("/progress-cycles", authGuard(["klien"]), klienController.startNewProgressCycle);
 
+// Endpoint Progres Klien
+router.post("/activity-logs", authGuard(["klien"]), klienController.createActivityLog);
+router.post("/meal-logs", authGuard(["klien"]), klienController.createMealLog);
+router.get("/weekly-plan/current", authGuard(["klien"]), klienController.getCurrentWeeklyPlan);
+
 router.get("/ping", authGuard(["klien"]), (req, res) => {
   res.json({ data: `klien ${req.user?.id} ok` });
 });

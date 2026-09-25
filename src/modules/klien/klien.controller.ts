@@ -5,13 +5,15 @@ import {
   changePasswordSchema, 
   changeThemeSchema, 
   weightLogSchema, 
-  newCycleSchema 
+  newCycleSchema,
+  createActivityLogSchema,
+  createMealLogSchema
 } from "./klien.schema";
 
 export const klienController = {
   async getProfile(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const data = await klienService.getProfile(userId);
       res.json({ data });
@@ -22,7 +24,7 @@ export const klienController = {
 
   async updateProfile(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const parsedData = updateProfileSchema.parse(req.body);
       const data = await klienService.updateProfile(userId, parsedData);
@@ -34,7 +36,7 @@ export const klienController = {
 
   async changePassword(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const parsedData = changePasswordSchema.parse(req.body);
       const data = await klienService.changePassword(userId, parsedData);
@@ -46,7 +48,7 @@ export const klienController = {
 
   async changeTheme(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const parsedData = changeThemeSchema.parse(req.body);
       const data = await klienService.changeTheme(userId, parsedData);
@@ -58,7 +60,7 @@ export const klienController = {
 
   async addWeightLog(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const parsedData = weightLogSchema.parse(req.body);
       const data = await klienService.addWeightLog(userId, parsedData);
@@ -70,7 +72,7 @@ export const klienController = {
 
   async getProgressCycles(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const data = await klienService.getProgressCycles(userId);
       res.json({ data });
@@ -81,10 +83,45 @@ export const klienController = {
 
   async startNewProgressCycle(req: Request, res: Response, next: NextFunction) {
     try {
-      // @ts-ignore
+      // @ts-expect-error req.user is injected by authGuard
       const userId = req.user.id;
       const parsedData = newCycleSchema.parse(req.body);
       const data = await klienService.startNewProgressCycle(userId, parsedData);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async createActivityLog(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const parsedData = createActivityLogSchema.parse(req.body);
+      const data = await klienService.createActivityLog(userId, parsedData);
+      res.status(201).json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async createMealLog(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const parsedData = createMealLogSchema.parse(req.body);
+      const data = await klienService.createMealLog(userId, parsedData);
+      res.status(201).json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getCurrentWeeklyPlan(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await klienService.getCurrentWeeklyPlan(userId);
       res.json({ data });
     } catch (error) {
       next(error);

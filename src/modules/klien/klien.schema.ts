@@ -33,3 +33,23 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ChangeThemeInput = z.infer<typeof changeThemeSchema>;
 export type WeightLogInput = z.infer<typeof weightLogSchema>;
 export type NewCycleInput = z.infer<typeof newCycleSchema>;
+
+export const createActivityLogSchema = z.object({
+  olahragaId: z.number().int().positive("Olahraga ID harus positif"),
+  durasiMenit: z.number().int().positive("Durasi menit harus positif"),
+  jarakMeter: z.number().positive("Jarak harus positif").optional(),
+  weeklyPlanId: z.number().int().positive().optional(),
+});
+
+export const createMealLogSchema = z.object({
+  makananId: z.number().int().positive().optional(),
+  namaMakanan: z.string().min(1).max(150).optional(),
+  porsiGram: z.number().positive("Porsi gram harus positif"),
+  weeklyPlanId: z.number().int().positive().optional(),
+}).refine((data) => data.makananId !== undefined || data.namaMakanan !== undefined, {
+  message: "Harus mengirim makananId atau namaMakanan",
+  path: ["makananId", "namaMakanan"], // Memberikan marker error pada field
+});
+
+export type CreateActivityLogInput = z.infer<typeof createActivityLogSchema>;
+export type CreateMealLogInput = z.infer<typeof createMealLogSchema>;
