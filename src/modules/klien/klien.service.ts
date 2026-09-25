@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db } from "../../config/db";
-import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan } from "../../db/schema";
+import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
@@ -397,4 +397,80 @@ export const klienService = {
       mealPlan: plan.mealPlan,
     };
   },
+
+  async sendPairingRequest(klienUserId: number, data: { ptId: number }) {
+    const klienProfile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, klienUserId),
+    });
+
+    if (!klienProfile) throw new AppError(404, "Profil tidak ditemukan");
+
+    if (klienProfile.ptId === data.ptId) {
+      throw new AppError(409, "Kamu sudah dipasangkan dengan PT ini.");
+    }
+
+    const ptProfile = await db.query.ptProfiles.findFirst({
+      where: eq(ptProfiles.id, data.ptId),
+    });
+
+    if (!ptProfile) throw new AppError(404, "PT tidak ditemukan");
+
+    const existingPending = await db.query.pairingRequests.findFirst({
+      where: and(
+        eq(pairingRequests.klienId, klienProfile.id),
+        eq(pairingRequests.status, "pending")
+      ),
+    });
+
+    if (existingPending) {
+      throw new AppError(409, "Kamu sudah punya request yang sedang menunggu. Batalkan atau tunggu responsnya.");
+    }
+
+    const [insertReq] = await db.insert(pairingRequests).values({
+      klienId: klienProfile.id,
+      ptId: data.ptId,
+      status: "pending",
+    });
+
+    const newReq = await db.query.pairingRequests.findFirst({
+      where: eq(pairingRequests.id, insertReq.insertId),
+    });
+
+    return {
+      id: newReq!.id,
+      status: newReq!.status,
+      createdAt: newReq!.createdAt,
+    };
+  },
+
+  async getCurrentPairingRequest(klienUserId: number) {
+    const klienProfile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, klienUserId),
+    });
+
+    if (!klienProfile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const request = await db.query.pairingRequests.findFirst({
+      where: eq(pairingRequests.klienId, klienProfile.id),
+      orderBy: [desc(pairingRequests.createdAt)],
+      with: {
+        pt: true
+      }
+    });
+
+    if (!request) return null;
+
+    return {
+      id: request.id,
+      status: request.status,
+      alasanPenolakan: request.alasanPenolakan,
+      createdAt: request.createdAt,
+      pt: {
+        id: request.pt.id,
+        nama: request.pt.nama,
+        spesialisasi: request.pt.spesialisasi,
+        tempatGym: request.pt.tempatGym,
+      }
+    };
+  }
 };

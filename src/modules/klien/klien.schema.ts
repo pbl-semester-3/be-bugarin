@@ -53,3 +53,9 @@ export const createMealLogSchema = z.object({
 
 export type CreateActivityLogInput = z.infer<typeof createActivityLogSchema>;
 export type CreateMealLogInput = z.infer<typeof createMealLogSchema>;
+
+export const sendPairingRequestSchema = z.object({
+  ptId: z.number().int().positive("ptId harus bernilai positif"),
+});
+
+export type SendPairingRequestInput = z.infer<typeof sendPairingRequestSchema>;

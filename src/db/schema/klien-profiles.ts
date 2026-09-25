@@ -1,5 +1,6 @@
 import { mysqlTable, int, varchar, text, float, mysqlEnum, index } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
+import { progressCycles } from "./progress-cycles";
 import { users } from "./users";
 import { ptProfiles } from "./pt-profiles";
 
@@ -19,9 +20,10 @@ export const klienProfiles = mysqlTable("klien_profiles", {
   ptIdIdx: index("idx_klien_profiles_pt_id").on(table.ptId),
 }));
 
-export const klienProfilesRelations = relations(klienProfiles, ({ one }) => ({
+export const klienProfilesRelations = relations(klienProfiles, ({ one, many }) => ({
   user: one(users, { fields: [klienProfiles.userId], references: [users.id] }),
   pt: one(ptProfiles, { fields: [klienProfiles.ptId], references: [ptProfiles.id] }),
+  progressCycles: many(progressCycles),
 }));
 
 export type KlienProfile = typeof klienProfiles.$inferSelect;
