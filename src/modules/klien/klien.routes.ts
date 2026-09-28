@@ -14,6 +14,7 @@ router.put("/theme", authGuard(["klien"]), klienController.changeTheme);
 router.post("/weight-logs", authGuard(["klien"]), klienController.addWeightLog);
 router.get("/progress-cycles", authGuard(["klien"]), klienController.getProgressCycles);
 router.post("/progress-cycles", authGuard(["klien"]), klienController.startNewProgressCycle);
+router.get("/progress-cycles/:id/logs", authGuard(["klien"]), klienController.getCycleLogs);
 
 // Endpoint Progres Klien
 router.post("/activity-logs", authGuard(["klien"]), klienController.createActivityLog);

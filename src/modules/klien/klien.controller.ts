@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { klienService } from "./klien.service";
 import { 
   updateProfileSchema, 
@@ -147,6 +148,25 @@ export const klienController = {
       const userId = req.user.id;
       const data = await klienService.getCurrentPairingRequest(userId);
       res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getCycleLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID siklus tidak valid" });
+      }
+      
+      const cycleId = paramResult.data;
+      const data = await klienService.getCycleLogs(userId, cycleId);
+      
+      res.json({ data, meta: { total: data.length } });
     } catch (error) {
       next(error);
     }
