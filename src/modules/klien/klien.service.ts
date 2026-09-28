@@ -1,4 +1,4 @@
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { db } from "../../config/db";
 import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
@@ -472,5 +472,81 @@ export const klienService = {
         tempatGym: request.pt.tempatGym,
       }
     };
+  },
+
+  async getCycleLogs(userId: number, cycleId: number) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+
+    if (!profile) throw new AppError(404, "Siklus tidak ditemukan");
+
+    const cycle = await db.query.progressCycles.findFirst({
+      where: eq(progressCycles.id, cycleId),
+    });
+
+    if (!cycle || cycle.klienId !== profile.id) {
+      throw new AppError(404, "Siklus tidak ditemukan");
+    }
+
+    const mulai = cycle.tanggalMulai;
+    const akhir = cycle.status === "selesai" && cycle.tanggalSelesai 
+      ? cycle.tanggalSelesai 
+      : new Date().toISOString().slice(0, 10);
+
+    const activitySums = await db.select({
+      tanggal: activityLogs.tanggal,
+      total: sql<string>`SUM(${activityLogs.kaloriTerbakar})`,
+    })
+    .from(activityLogs)
+    .where(and(
+      eq(activityLogs.klienId, profile.id),
+      gte(activityLogs.tanggal, mulai),
+      lte(activityLogs.tanggal, akhir)
+    ))
+    .groupBy(activityLogs.tanggal);
+
+    const mealSums = await db.select({
+      tanggal: mealLogs.tanggal,
+      total: sql<string>`SUM(${mealLogs.kaloriMasuk})`,
+    })
+    .from(mealLogs)
+    .where(and(
+      eq(mealLogs.klienId, profile.id),
+      gte(mealLogs.tanggal, mulai),
+      lte(mealLogs.tanggal, akhir)
+    ))
+    .groupBy(mealLogs.tanggal);
+
+    const logMap = new Map<string, { kaloriMasuk: number, kaloriKeluar: number }>();
+
+    for (const item of activitySums) {
+      logMap.set(item.tanggal, {
+        kaloriMasuk: 0,
+        kaloriKeluar: Number(item.total) || 0
+      });
+    }
+
+    for (const item of mealSums) {
+      const existing = logMap.get(item.tanggal);
+      if (existing) {
+        existing.kaloriMasuk = Number(item.total) || 0;
+      } else {
+        logMap.set(item.tanggal, {
+          kaloriMasuk: Number(item.total) || 0,
+          kaloriKeluar: 0
+        });
+      }
+    }
+
+    const logs = Array.from(logMap.entries()).map(([tanggal, data]) => ({
+      tanggal,
+      kaloriMasuk: data.kaloriMasuk,
+      kaloriKeluar: data.kaloriKeluar,
+    }));
+
+    logs.sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+    return logs;
   }
 };
