@@ -59,3 +59,9 @@ export const sendPairingRequestSchema = z.object({
 });
 
 export type SendPairingRequestInput = z.infer<typeof sendPairingRequestSchema>;
+
+export const replyFeedbackSchema = z.object({
+  balasan: z.string().min(1, "Balasan tidak boleh kosong").max(1000),
+});
+
+export type ReplyFeedbackInput = z.infer<typeof replyFeedbackSchema>;

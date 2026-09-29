@@ -9,7 +9,8 @@ import {
   newCycleSchema,
   createActivityLogSchema,
   createMealLogSchema,
-  sendPairingRequestSchema
+  sendPairingRequestSchema,
+  replyFeedbackSchema
 } from "./klien.schema";
 
 export const klienController = {
@@ -167,6 +168,58 @@ export const klienController = {
       const data = await klienService.getCycleLogs(userId, cycleId);
       
       res.json({ data, meta: { total: data.length } });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getFeedbacks(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const response = await klienService.getFeedbacks(userId);
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async replyFeedback(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID feedback tidak valid" });
+      }
+      const feedbackId = paramResult.data;
+
+      const bodyResult = replyFeedbackSchema.safeParse(req.body);
+      if (!bodyResult.success) {
+        return res.status(400).json({ error: bodyResult.error.errors[0].message });
+      }
+
+      const response = await klienService.replyFeedback(userId, feedbackId, bodyResult.data.balasan);
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async readFeedback(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID feedback tidak valid" });
+      }
+      const feedbackId = paramResult.data;
+
+      const response = await klienService.readFeedback(userId, feedbackId);
+      res.json(response);
     } catch (error) {
       next(error);
     }
