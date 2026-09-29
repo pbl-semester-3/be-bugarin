@@ -25,6 +25,11 @@ router.get("/weekly-plan/current", authGuard(["klien"]), klienController.getCurr
 router.post("/pairing-requests", authGuard(["klien"]), klienController.sendPairingRequest);
 router.get("/pairing-requests/current", authGuard(["klien"]), klienController.getCurrentPairingRequest);
 
+// Feedback Klien
+router.get("/feedbacks", authGuard(["klien"]), klienController.getFeedbacks);
+router.post("/feedbacks/:id/reply", authGuard(["klien"]), klienController.replyFeedback);
+router.put("/feedbacks/:id/read", authGuard(["klien"]), klienController.readFeedback);
+
 router.get("/ping", authGuard(["klien"]), (req, res) => {
   res.json({ data: `klien ${req.user?.id} ok` });
 });

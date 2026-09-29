@@ -1,6 +1,6 @@
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { db } from "../../config/db";
-import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests } from "../../db/schema";
+import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests, feedbacks } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
@@ -548,5 +548,130 @@ export const klienService = {
     logs.sort((a, b) => a.tanggal.localeCompare(b.tanggal));
 
     return logs;
+  },
+
+  async getFeedbacks(userId: number) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const result = await db.query.feedbacks.findMany({
+      where: eq(feedbacks.klienId, profile.id),
+      with: {
+        pt: true,
+      },
+      orderBy: desc(feedbacks.createdAt),
+    });
+
+    return {
+      data: result.map((f) => ({
+        id: f.id,
+        source: f.source,
+        pesan: f.pesan,
+        balasanKlien: f.balasanKlien,
+        dibaca: f.dibaca,
+        createdAt: f.createdAt,
+        pt: f.source === "ai" ? null : (f.pt ? {
+          id: f.pt.id,
+          nama: f.pt.nama,
+        } : null),
+      })),
+      meta: { total: result.length }
+    };
+  },
+
+  async replyFeedback(userId: number, feedbackId: number, balasan: string) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const feedback = await db.query.feedbacks.findFirst({
+      where: and(
+        eq(feedbacks.id, feedbackId),
+        eq(feedbacks.klienId, profile.id)
+      ),
+      with: { pt: true },
+    });
+
+    if (!feedback) {
+      throw new AppError(404, "Feedback tidak ditemukan");
+    }
+
+    if (feedback.source === "ai") {
+      throw new AppError(400, "Feedback dari AI tidak dapat dibalas");
+    }
+
+    if (feedback.balasanKlien !== null) {
+      throw new AppError(400, "Feedback sudah dibalas");
+    }
+
+    await db.update(feedbacks)
+      .set({ balasanKlien: balasan })
+      .where(eq(feedbacks.id, feedback.id));
+
+    const updated = await db.query.feedbacks.findFirst({
+      where: eq(feedbacks.id, feedback.id),
+      with: { pt: true },
+    });
+
+    return {
+      data: {
+        id: updated!.id,
+        source: updated!.source,
+        pesan: updated!.pesan,
+        balasanKlien: updated!.balasanKlien,
+        dibaca: updated!.dibaca,
+        createdAt: updated!.createdAt,
+        pt: updated!.source === "ai" ? null : (updated!.pt ? {
+          id: updated!.pt.id,
+          nama: updated!.pt.nama,
+        } : null),
+      }
+    };
+  },
+
+  async readFeedback(userId: number, feedbackId: number) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const feedback = await db.query.feedbacks.findFirst({
+      where: and(
+        eq(feedbacks.id, feedbackId),
+        eq(feedbacks.klienId, profile.id)
+      ),
+      with: { pt: true },
+    });
+
+    if (!feedback) {
+      throw new AppError(404, "Feedback tidak ditemukan");
+    }
+
+    await db.update(feedbacks)
+      .set({ dibaca: true })
+      .where(eq(feedbacks.id, feedback.id));
+
+    const updated = await db.query.feedbacks.findFirst({
+      where: eq(feedbacks.id, feedback.id),
+      with: { pt: true },
+    });
+
+    return {
+      data: {
+        id: updated!.id,
+        source: updated!.source,
+        pesan: updated!.pesan,
+        balasanKlien: updated!.balasanKlien,
+        dibaca: updated!.dibaca,
+        createdAt: updated!.createdAt,
+        pt: updated!.source === "ai" ? null : (updated!.pt ? {
+          id: updated!.pt.id,
+          nama: updated!.pt.nama,
+        } : null),
+      }
+    };
   }
 };
