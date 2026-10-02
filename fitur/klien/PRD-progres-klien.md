@@ -86,7 +86,7 @@ Fitur Progres Klien mencakup seluruh mekanisme pencatatan aktivitas harian klien
 
 6. **Tanpa Side-Effect Tambahan**
 
-   - Endpoint ini **hanya** insert ke `activity_logs`. Tidak trigger recalculation streak, tidak update progress cycle, tidak trigger AI feedback. Semua itu adalah tanggung jawab endpoint/proses lain yang membaca data ini.
+   - Endpoint ini insert ke `activity_logs` dan melakukan **recalculate `progress_cycles.streak`** untuk siklus aktif (streak akumulatif per siklus, lihat `CATATAN.md`). Tidak trigger AI feedback, tidak membuat/menutup siklus, tidak mengubah status siklus.
 
 ### Skema Data yang Dipakai (Tidak Ada Perubahan Schema)
 
@@ -219,7 +219,7 @@ createActivityLogSchema:
 
 6. **Tanpa Side-Effect Tambahan**
 
-   - Endpoint ini **hanya** insert ke `meal_logs` (dan potensial insert ke `master_makanan` jika get-or-create). Tidak trigger recalculation streak, tidak trigger AI feedback, tidak update progress cycle.
+   - Endpoint ini insert ke `meal_logs` (dan potensial insert ke `master_makanan` jika get-or-create) serta melakukan **recalculate `progress_cycles.streak`** untuk siklus aktif (lihat `CATATAN.md`). Tidak trigger AI feedback, tidak membuat/menutup siklus, tidak mengubah status siklus.
 
 ### Skema Data yang Dipakai (Tidak Ada Perubahan Schema)
 

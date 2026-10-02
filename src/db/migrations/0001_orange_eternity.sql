@@ -1,0 +1,1 @@
+ALTER TABLE `progress_cycles` ADD `streak` int DEFAULT 0 NOT NULL;

@@ -21,6 +21,9 @@ router.post("/activity-logs", authGuard(["klien"]), klienController.createActivi
 router.post("/meal-logs", authGuard(["klien"]), klienController.createMealLog);
 router.get("/weekly-plan/current", authGuard(["klien"]), klienController.getCurrentWeeklyPlan);
 
+// Dashboard Klien
+router.get("/dashboard-summary", authGuard(["klien"]), klienController.getDashboardSummary);
+
 // Pairing Requests
 router.post("/pairing-requests", authGuard(["klien"]), klienController.sendPairingRequest);
 router.get("/pairing-requests/current", authGuard(["klien"]), klienController.getCurrentPairingRequest);
