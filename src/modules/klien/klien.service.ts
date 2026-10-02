@@ -1,6 +1,6 @@
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { db } from "../../config/db";
-import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests, feedbacks } from "../../db/schema";
+import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests, feedbacks, type WorkoutPlanItem } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
@@ -15,6 +15,85 @@ import type {
   CreateActivityLogInput,
   CreateMealLogInput
 } from "./klien.schema";
+
+export type DashboardSummary = {
+  pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null } | null;
+  targetKaloriHariIni: number | null;
+  streak: number;
+  jadwalMingguan: WorkoutPlanItem[];
+  isReminderActive: boolean;
+  unreadFeedbackCount: number;
+};
+
+function shiftUtcDate(dateStr: string, deltaDays: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
+}
+
+// TODO(tech-debt): Rumus awal minggu di sini ((getDay() || 7) + setHours) TIDAK identik dengan
+// yang dipakai startNewProgressCycle() ((getDate() - getDay() + 1)). Pada hari Minggu kedua rumus
+// menghasilkan Senin yang berbeda, sehingga weekly_plan hasil generate berisiko tidak muncul di
+// endpoint minggu berjalan. Detail: updates/2026-10-02-inkonsistensi-rumus-awal-minggu.md
+async function getCurrentWeeklyPlanRecord(klienProfileId: number) {
+  const date = new Date();
+  const day = date.getDay() || 7;
+  if (day !== 1) date.setHours(-24 * (day - 1));
+  const startOfWeek = date.toISOString().slice(0, 10);
+
+  return db.query.weeklyPlans.findFirst({
+    where: and(
+      eq(weeklyPlans.klienId, klienProfileId),
+      eq(weeklyPlans.mingguMulai, startOfWeek),
+    ),
+    orderBy: [desc(weeklyPlans.generatedAt)],
+  });
+}
+
+// Streak = jumlah hari unik (activity_logs OR meal_logs) di dalam window siklus.
+// Dipakai untuk update realtime saat insert log. Lihat CATATAN.md.
+async function computeCycleStreak(klienId: number, mulai: string, akhir: string): Promise<number> {
+  const activityRows = await db
+    .selectDistinct({ tanggal: activityLogs.tanggal })
+    .from(activityLogs)
+    .where(and(
+      eq(activityLogs.klienId, klienId),
+      gte(activityLogs.tanggal, mulai),
+      lte(activityLogs.tanggal, akhir),
+    ));
+
+  const mealRows = await db
+    .selectDistinct({ tanggal: mealLogs.tanggal })
+    .from(mealLogs)
+    .where(and(
+      eq(mealLogs.klienId, klienId),
+      gte(mealLogs.tanggal, mulai),
+      lte(mealLogs.tanggal, akhir),
+    ));
+
+  const distinctDates = new Set<string>();
+  for (const row of activityRows) distinctDates.add(row.tanggal);
+  for (const row of mealRows) distinctDates.add(row.tanggal);
+  return distinctDates.size;
+}
+
+export async function recalculateActiveCycleStreak(klienId: number): Promise<number> {
+  const activeCycle = await db.query.progressCycles.findFirst({
+    where: and(eq(progressCycles.klienId, klienId), eq(progressCycles.status, "aktif")),
+    orderBy: [desc(progressCycles.tanggalMulai)],
+  });
+  if (!activeCycle) return 0;
+
+  const akhir =
+    activeCycle.status === "selesai" && activeCycle.tanggalSelesai
+      ? activeCycle.tanggalSelesai
+      : new Date().toISOString().slice(0, 10);
+
+  const streak = await computeCycleStreak(klienId, activeCycle.tanggalMulai, akhir);
+  await db.update(progressCycles).set({ streak }).where(eq(progressCycles.id, activeCycle.id));
+  return streak;
+}
 
 export const klienService = {
   async getProfile(klienId: number) {
@@ -197,7 +276,10 @@ export const klienService = {
         tempatGym: profile.pt.tempatGym || "",
       })
       .then(async (plan) => {
-        // Cari id klien dari user
+        // TODO(tech-debt): Rumus awal minggu di sini (getDate() - getDay() + 1) TIDAK identik dengan
+        // getCurrentWeeklyPlanRecord() ((getDay() || 7) + setHours). Pada hari Minggu kedua rumus
+        // menghasilkan Senin yang berbeda, sehingga weekly_plan hasil generate berisiko tidak muncul
+        // di endpoint minggu berjalan. Detail: updates/2026-10-02-inkonsistensi-rumus-awal-minggu.md
         const date = new Date();
         const startOfWeek = new Date(date.setDate(date.getDate() - date.getDay() + 1)).toISOString().slice(0, 10);
         
@@ -263,6 +345,8 @@ export const klienService = {
       tanggal,
       weeklyPlanId: data.weeklyPlanId || null,
     });
+
+    await recalculateActiveCycleStreak(profile.id);
 
     return {
       id: insertResult.insertId,
@@ -355,6 +439,8 @@ export const klienService = {
       weeklyPlanId: data.weeklyPlanId || null,
     });
 
+    await recalculateActiveCycleStreak(profile.id);
+
     return {
       id: insertResult.insertId,
       makananId: resolvedMakananId,
@@ -372,22 +458,9 @@ export const klienService = {
     });
     if (!profile) throw new AppError(404, "Profil tidak ditemukan");
 
-    // Mencari tanggal hari Senin minggu ini
-    const date = new Date();
-    const day = date.getDay() || 7;
-    if (day !== 1) date.setHours(-24 * (day - 1));
-    const startOfWeek = date.toISOString().slice(0, 10);
+    const plan = await getCurrentWeeklyPlanRecord(profile.id);
 
-    const plan = await db.query.weeklyPlans.findFirst({
-      where: and(
-        eq(weeklyPlans.klienId, profile.id),
-        eq(weeklyPlans.mingguMulai, startOfWeek),
-        sql`${weeklyPlans.status} IN ('disetujui', 'override')`
-      ),
-      orderBy: [desc(weeklyPlans.generatedAt)],
-    });
-
-    if (!plan) return null;
+    if (!plan || (plan.status !== "disetujui" && plan.status !== "override")) return null;
 
     return {
       id: plan.id,
@@ -395,6 +468,49 @@ export const klienService = {
       status: plan.status,
       workoutPlan: plan.workoutPlan,
       mealPlan: plan.mealPlan,
+    };
+  },
+
+  async getDashboardSummary(userId: number): Promise<DashboardSummary> {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+      with: { pt: true },
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [activeCycle, weeklyPlan, unreadRows] = await Promise.all([
+      db.query.progressCycles.findFirst({
+        where: and(eq(progressCycles.klienId, profile.id), eq(progressCycles.status, "aktif")),
+        orderBy: [desc(progressCycles.tanggalMulai)],
+      }),
+      getCurrentWeeklyPlanRecord(profile.id),
+      db.select({ total: sql<number>`COUNT(*)` })
+        .from(feedbacks)
+        .where(and(eq(feedbacks.klienId, profile.id), eq(feedbacks.dibaca, false))),
+    ]);
+
+    const streak = activeCycle ? activeCycle.streak : 0;
+
+    const jadwalMingguan =
+      weeklyPlan && weeklyPlan.status !== "pending_review" ? weeklyPlan.workoutPlan : [];
+
+    const isReminderActive = activeCycle
+      ? today > shiftUtcDate(activeCycle.tanggalMulai, activeCycle.durasiHari)
+      : false;
+
+    const pt = profile.ptId && profile.pt
+      ? { id: profile.pt.id, nama: profile.pt.nama, spesialisasi: profile.pt.spesialisasi }
+      : null;
+
+    return {
+      pt,
+      targetKaloriHariIni: activeCycle ? activeCycle.targetKaloriPerHari : null,
+      streak,
+      jadwalMingguan,
+      isReminderActive,
+      unreadFeedbackCount: Number(unreadRows[0]?.total ?? 0),
     };
   },
 

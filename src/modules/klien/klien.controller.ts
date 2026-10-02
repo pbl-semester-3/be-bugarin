@@ -131,6 +131,17 @@ export const klienController = {
     }
   },
 
+  async getDashboardSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await klienService.getDashboardSummary(userId);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async sendPairingRequest(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

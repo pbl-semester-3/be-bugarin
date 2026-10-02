@@ -11,6 +11,9 @@ export const progressCycles = mysqlTable("progress_cycles", {
   // Informasi target waktu saja — BUKAN trigger penutupan paksa (lihat bugarin_schema_notes.md bab 3).
   durasiHari: int("durasi_hari").notNull(),
   targetKaloriPerHari: int("target_kalori_per_hari").notNull(),
+  // Total hari unik (activity_logs OR meal_logs) dalam window siklus. Tidak pernah reset
+  // selama siklus berjalan; mulai 0 saat siklus baru dibuat. Lihat CATATAN.md.
+  streak: int("streak").notNull().default(0),
   status: mysqlEnum("status", ["aktif", "selesai"]).notNull().default("aktif"),
   tanggalMulai: date("tanggal_mulai", { mode: "string" }).notNull(),
   tanggalSelesai: date("tanggal_selesai", { mode: "string" }),

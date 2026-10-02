@@ -1,7 +1,7 @@
 import { createApp } from "../../src/app";
 import { db } from "../../src/config/db";
 import { users, klienProfiles, weightLogs, masterOlahraga, masterMakanan, weeklyPlans, activityLogs, mealLogs, progressCycles } from "../../src/db/schema";
-import { eq, sql, desc, and } from "drizzle-orm";
+import { eq, sql, and, gte, lte } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { env } from "../../src/config/env";
 
@@ -29,9 +29,9 @@ async function runTests() {
       });
     }
     
-    let klienProfile = await db.query.klienProfiles.findFirst({ where: eq(klienProfiles.userId, klienUser!.id) });
+    const klienProfile = await db.query.klienProfiles.findFirst({ where: eq(klienProfiles.userId, klienUser!.id) });
     
-    let activeCycle = await db.query.progressCycles.findFirst({ where: and(eq(progressCycles.klienId, klienProfile!.id), eq(progressCycles.status, "aktif")) });
+    const activeCycle = await db.query.progressCycles.findFirst({ where: and(eq(progressCycles.klienId, klienProfile!.id), eq(progressCycles.status, "aktif")) });
     if (!activeCycle) {
       const [insertCycle] = await db.insert(progressCycles).values({
         klienId: klienProfile!.id,
@@ -161,6 +161,28 @@ async function runTests() {
     await db.update(weeklyPlans).set({ status: "disetujui" }).where(eq(weeklyPlans.id, planId));
     const res3c = await fetch(`${baseUrl}/klien/weekly-plan/current`, { headers: authHeaders });
     console.log(`3c. [${res3c.status}] Response: ${await res3c.text()}`);
+
+    console.log("\n=== TEST 4: Verifikasi streak cycle (akumulatif, tersimpan realtime) ===");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const cycleNow = await db.query.progressCycles.findFirst({
+      where: and(eq(progressCycles.klienId, klienProfile!.id), eq(progressCycles.status, "aktif")),
+    });
+    const akhir = cycleNow!.status === "selesai" && cycleNow!.tanggalSelesai ? cycleNow!.tanggalSelesai : todayStr;
+    const actDates = await db.selectDistinct({ t: activityLogs.tanggal }).from(activityLogs).where(and(
+      eq(activityLogs.klienId, klienProfile!.id),
+      gte(activityLogs.tanggal, cycleNow!.tanggalMulai),
+      lte(activityLogs.tanggal, akhir),
+    ));
+    const mealDates = await db.selectDistinct({ t: mealLogs.tanggal }).from(mealLogs).where(and(
+      eq(mealLogs.klienId, klienProfile!.id),
+      gte(mealLogs.tanggal, cycleNow!.tanggalMulai),
+      lte(mealLogs.tanggal, akhir),
+    ));
+    const expectedDates = new Set<string>();
+    for (const row of actDates) expectedDates.add(row.t);
+    for (const row of mealDates) expectedDates.add(row.t);
+    console.log(`    DB progress_cycles.streak=${cycleNow!.streak}, expected COUNT(DISTINCT tanggal)=${expectedDates.size}`);
+    console.log(`    ${cycleNow!.streak === expectedDates.size ? "PASS" : "FAIL"}: streak cycle tersimpan sesuai recompute realtime`);
 
   } finally {
     server.close();
