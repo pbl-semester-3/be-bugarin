@@ -114,7 +114,7 @@ export const ptService = {
     }
 
     if (request.ptId !== ptProfile.id) {
-      throw new AppError(403, "Akses ditolak");
+      throw new AppError(404, "Data tidak ditemukan");
     }
 
     if (request.status !== "pending") {

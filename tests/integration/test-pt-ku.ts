@@ -172,6 +172,7 @@ async function runTests() {
       body: JSON.stringify({}) // terima
     });
     console.log(`5a. PT lain mencoba respond -> [${res5a.status}] ${await res5a.text()}`);
+    console.log(`    ${res5a.status === 404 ? "PASS" : "FAIL"}: PT lain harus mendapat 404 (bukan 403) untuk menyembunyikan keberadaan data`);
 
 
     // === TEST 6: PUT /pt/pairing-requests/:id - TERIMA ===
