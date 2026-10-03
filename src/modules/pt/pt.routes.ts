@@ -4,6 +4,12 @@ import { ptController } from "./pt.controller";
 
 const router = Router();
 
+// Endpoint Profil PT
+router.get("/profile", authGuard(["pt"]), ptController.getProfile);
+router.put("/profile", authGuard(["pt"]), ptController.updateProfile);
+router.put("/password", authGuard(["pt"]), ptController.changePassword);
+router.put("/theme", authGuard(["pt"]), ptController.changeTheme);
+
 // Endpoint PT Ku (Rekomendasi PT untuk Klien)
 // Harus di-mount di /pt (di app.ts: app.use("/pt", ptRoutes))
 router.get("/recommendations", authGuard(["klien"]), ptController.getPtRecommendations);

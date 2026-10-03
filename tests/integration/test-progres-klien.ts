@@ -4,6 +4,7 @@ import { users, klienProfiles, weightLogs, masterOlahraga, masterMakanan, weekly
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { env } from "../../src/config/env";
+import { getStartOfWeekUtc } from "../../src/utils/week";
 
 const PORT = 9999;
 
@@ -142,10 +143,7 @@ async function runTests() {
     const res3a = await fetch(`${baseUrl}/klien/weekly-plan/current`, { headers: authHeaders });
     console.log(`3a. [${res3a.status}] Response: ${await res3a.text()}`);
 
-    const date = new Date();
-    const day = date.getDay() || 7;
-    date.setHours(-24 * (day - 1));
-    const startOfWeek = date.toISOString().slice(0, 10);
+    const startOfWeek = getStartOfWeekUtc();
     
     const [insertPlan] = await db.insert(weeklyPlans).values({
       klienId: klienProfile!.id,

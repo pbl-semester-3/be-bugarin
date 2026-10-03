@@ -2,6 +2,7 @@ import { and, eq, isNotNull, desc } from "drizzle-orm";
 import { db } from "../config/db";
 import { klienProfiles, progressCycles, ptProfiles, weightLogs, weeklyPlans } from "../db/schema";
 import { generateWeeklyPlan } from "../modules/ai/weekly-plan";
+import { getStartOfWeekUtc } from "../utils/week";
 
 // Dipanggil oleh: (1) node-cron lokal saat development, (2) endpoint /internal/jobs/*
 // yang dipicu cron-job.org di production (lihat SETUP.md bab 4 — Render free tier bisa
@@ -24,6 +25,14 @@ export async function generateWeeklyPlanForAllActiveKlien() {
     const [pt] = await db.select().from(ptProfiles).where(eq(ptProfiles.id, klien.ptId)).limit(1);
     if (!pt?.tempatGym) continue; // PT belum lengkapi profil, skip dulu
 
+    const startOfWeek = getStartOfWeekUtc();
+    const existingPlan = await db
+      .select()
+      .from(weeklyPlans)
+      .where(and(eq(weeklyPlans.klienId, klien.id), eq(weeklyPlans.mingguMulai, startOfWeek)))
+      .limit(1);
+    if (existingPlan.length > 0) continue; // sudah ada plan minggu ini, jangan buat duplikat
+
     const [latestWeight] = await db
       .select()
       .from(weightLogs)
@@ -43,7 +52,7 @@ export async function generateWeeklyPlanForAllActiveKlien() {
 
     await db.insert(weeklyPlans).values({
       klienId: klien.id,
-      mingguMulai: new Date().toISOString().slice(0, 10),
+      mingguMulai: startOfWeek,
       workoutPlan: plan.workoutPlan,
       mealPlan: plan.mealPlan,
       status: "pending_review",
