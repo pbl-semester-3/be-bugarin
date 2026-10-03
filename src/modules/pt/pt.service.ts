@@ -1,11 +1,11 @@
-import { eq, desc, and, isNotNull, ne } from "drizzle-orm";
+import { eq, desc, and, isNotNull, ne, asc } from "drizzle-orm";
 import { db } from "../../config/db";
-import { users, klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans } from "../../db/schema";
+import { users, klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans, weightLogs } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { getStartOfWeekUtc } from "../../utils/week";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 import * as argon2 from "argon2";
-import type { UpdatePtProfileInput, ChangePtPasswordInput, ChangePtThemeInput } from "./pt.schema";
+import type { UpdatePtProfileInput, ChangePtPasswordInput, ChangePtThemeInput, OverridePlanInput } from "./pt.schema";
 
 // Ownership convention: resolve pt_profiles dari users.id (req.user.id). JANGAN bandingkan
 // users.id langsung ke kolom pt_id — keduanya tidak dijamin sama.
@@ -31,6 +31,29 @@ async function buildPtProfile(ptUserId: number) {
       tempatGym: profile.tempatGym,
     },
   };
+}
+
+async function resolvePtProfileId(ptUserId: number): Promise<number> {
+  const profile = await db.query.ptProfiles.findFirst({
+    where: eq(ptProfiles.userId, ptUserId),
+  });
+  if (!profile) throw new AppError(404, "Profil PT tidak ditemukan");
+  return profile.id;
+}
+
+// Ownership plan: plan harus milik klien yang di-pairing ke PT ini. Gagal -> 404.
+async function getOwnedPlan(ptProfileId: number, planId: number) {
+  const plan = await db.query.weeklyPlans.findFirst({
+    where: eq(weeklyPlans.id, planId),
+  });
+  if (!plan) throw new AppError(404, "Data tidak ditemukan");
+
+  const klien = await db.query.klienProfiles.findFirst({
+    where: and(eq(klienProfiles.id, plan.klienId), eq(klienProfiles.ptId, ptProfileId)),
+  });
+  if (!klien) throw new AppError(404, "Data tidak ditemukan");
+
+  return plan;
 }
 
 export const ptService = {
@@ -74,6 +97,122 @@ export const ptService = {
   async changeTheme(ptUserId: number, data: ChangePtThemeInput) {
     await db.update(users).set({ tema: data.tema }).where(eq(users.id, ptUserId));
     return { tema: data.tema };
+  },
+
+  async listKlien(ptUserId: number) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+
+    const rows = await db.query.klienProfiles.findMany({
+      where: eq(klienProfiles.ptId, ptProfileId),
+      columns: { id: true, nama: true },
+      orderBy: [asc(klienProfiles.nama)],
+    });
+
+    return {
+      data: rows.map((k) => ({ id: k.id, nama: k.nama })),
+      meta: { total: rows.length },
+    };
+  },
+
+  async getKlienDetail(ptUserId: number, klienId: number) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+
+    const klien = await db.query.klienProfiles.findFirst({
+      where: and(eq(klienProfiles.id, klienId), eq(klienProfiles.ptId, ptProfileId)),
+    });
+    if (!klien) throw new AppError(404, "Data tidak ditemukan");
+
+    const activeCycle = await db.query.progressCycles.findFirst({
+      where: and(eq(progressCycles.klienId, klien.id), eq(progressCycles.status, "aktif")),
+    });
+
+    const logs = await db.query.weightLogs.findMany({
+      where: eq(weightLogs.klienId, klien.id),
+      orderBy: [asc(weightLogs.tanggal)],
+    });
+
+    return {
+      profil: {
+        id: klien.id,
+        nama: klien.nama,
+        usia: klien.usia,
+        jenisKelamin: klien.jenisKelamin,
+        tinggiBadanCm: klien.tinggiBadanCm,
+        bbAwalKg: activeCycle ? activeCycle.bbAwalKg : null,
+        bbTujuanKg: activeCycle ? activeCycle.bbTujuanKg : null,
+        tujuan: activeCycle ? activeCycle.tujuan : null,
+      },
+      grafikBb: logs.map((l) => ({ tanggal: l.tanggal, beratKg: l.beratBadanKg })),
+    };
+  },
+
+  async getKlienWeeklyPlan(ptUserId: number, klienId: number) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+
+    const klien = await db.query.klienProfiles.findFirst({
+      where: and(eq(klienProfiles.id, klienId), eq(klienProfiles.ptId, ptProfileId)),
+    });
+    if (!klien) throw new AppError(404, "Data tidak ditemukan");
+
+    const plan = await db.query.weeklyPlans.findFirst({
+      where: and(
+        eq(weeklyPlans.klienId, klien.id),
+        eq(weeklyPlans.mingguMulai, getStartOfWeekUtc()),
+      ),
+      orderBy: [desc(weeklyPlans.generatedAt)],
+    });
+    if (!plan) return null;
+
+    return {
+      id: plan.id,
+      mingguMulai: plan.mingguMulai,
+      status: plan.status,
+      workoutPlan: plan.workoutPlan,
+      mealPlan: plan.mealPlan,
+    };
+  },
+
+  async approveWeeklyPlan(ptUserId: number, planId: number) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+    const plan = await getOwnedPlan(ptProfileId, planId);
+
+    if (plan.status !== "pending_review") {
+      throw new AppError(400, "Plan sudah disetujui atau dioverride sebelumnya");
+    }
+
+    await db.update(weeklyPlans)
+      .set({ status: "disetujui", reviewedAt: new Date() })
+      .where(eq(weeklyPlans.id, plan.id));
+
+    return { id: plan.id, status: "disetujui" as const };
+  },
+
+  async overrideWeeklyPlan(ptUserId: number, planId: number, data: OverridePlanInput) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+    const plan = await getOwnedPlan(ptProfileId, planId);
+
+    const ptProfile = await db.query.ptProfiles.findFirst({
+      where: eq(ptProfiles.id, ptProfileId),
+    });
+    const lokasi = ptProfile?.tempatGym ?? "-";
+
+    const workoutPlan = data.workoutPlan.map((item) => ({ ...item, lokasi }));
+
+    await db.update(weeklyPlans)
+      .set({
+        workoutPlan,
+        mealPlan: data.mealPlan,
+        status: "override",
+        reviewedAt: new Date(),
+      })
+      .where(eq(weeklyPlans.id, plan.id));
+
+    return {
+      id: plan.id,
+      status: "override" as const,
+      workoutPlan,
+      mealPlan: data.mealPlan,
+    };
   },
 
   async getPtRecommendations(klienUserId: number) {
