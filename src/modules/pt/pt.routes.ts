@@ -10,6 +10,13 @@ router.put("/profile", authGuard(["pt"]), ptController.updateProfile);
 router.put("/password", authGuard(["pt"]), ptController.changePassword);
 router.put("/theme", authGuard(["pt"]), ptController.changeTheme);
 
+// Endpoint Klien Detail PT
+router.get("/klien", authGuard(["pt"]), ptController.listKlien);
+router.get("/klien/:id", authGuard(["pt"]), ptController.getKlienDetail);
+router.get("/klien/:id/weekly-plan", authGuard(["pt"]), ptController.getKlienWeeklyPlan);
+router.put("/weekly-plan/:id/approve", authGuard(["pt"]), ptController.approveWeeklyPlan);
+router.put("/weekly-plan/:id/override", authGuard(["pt"]), ptController.overrideWeeklyPlan);
+
 // Endpoint PT Ku (Rekomendasi PT untuk Klien)
 // Harus di-mount di /pt (di app.ts: app.use("/pt", ptRoutes))
 router.get("/recommendations", authGuard(["klien"]), ptController.getPtRecommendations);

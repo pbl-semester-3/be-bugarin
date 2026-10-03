@@ -49,7 +49,8 @@ Fitur ini menyediakan kemampuan fungsional bagi PT untuk mengelola secara indivi
    - **Spesifikasi Field**: Berbeda dengan endpoint `GET /pt/riwayat` yang berfungsi sebagai laporan *read-only* lengkap (menampilkan usia, gender, BB awal-sekarang), endpoint `GET /pt/klien` ini bertujuan spesifik untuk navigasi cepat (via list) menuju halaman Detail Klien. Oleh karena itu, field yang dikembalikan (pada tipe `KlienItem`) dibuat seminimal mungkin (hanya `id` dan `nama`) demi efisiensi *payload* dan agar tidak tumpang tindih secara tujuan dengan fitur riwayat.
 
 3. **Weekly Plan yang Perlu Direview (Resolusi "Minggu Berjalan")**
-   - Mengambil *weekly plan* HARUS memakai query yang IDENTIK dengan *Dashboard PT*: Ambil **1 baris terbaru** per klien (diurutkan `minggu_mulai` DESC LIMIT 1) dengan filter `minggu_mulai <= CURRENT_DATE`.
+   - Mengambil *weekly plan* memakai **exact-match Senin UTC**: `minggu_mulai = getStartOfWeekUtc()` (Senin dari minggu berjalan, dihitung UTC — lihat `src/utils/week.ts`), lalu ambil **1 baris terbaru** bila ada duplikat (`ORDER BY generated_at DESC`). Query IDENTIK dengan *Dashboard PT*.
+   - Catatan revisi (2026-10-03): sebelumnya PRD memakai "baris terbaru dengan `minggu_mulai <= CURRENT_DATE`"; disamakan ke exact-Monday UTC agar konsisten dengan sisi Klien dan cron. Jika plan minggu ini belum ter-generate, hasilnya `null`.
    - Endpoint ini **TIDAK HANYA** mengembalikan status `pending_review`. Plan tetap dikembalikan apa pun statusnya (termasuk yang sudah `disetujui`/`override`).
    - Alasannya: PT butuh melihat plan aktif untuk minggu ini. *Frontend* yang akan menggunakan properti `status` dari response ini untuk men-disable (me-nonaktifkan) tombol *Setuju* atau mematikan state form.
 
@@ -58,14 +59,15 @@ Fitur ini menyediakan kemampuan fungsional bagi PT untuk mengelola secara indivi
    - Jika *race condition* terjadi atau PT iseng menembak endpoint pada plan yang statusnya sudah `disetujui`/`override`, request ditolak dengan HTTP 400 `"Plan sudah disetujui atau dioverride sebelumnya"`.
 
 5. **[KEPUTUSAN FINAL] Override Plan Berlaku Kapan Saja**
-   - Endpoint `PUT .../override` **DIİZINKAN** untuk dieksekusi kapan saja (selama plan merupakan plan minggu berjalan), baik di saat plan masih `pending_review`, maupun jika **sudah `disetujui` atau di-`override` sebelumnya**.
+   - Endpoint `PUT .../override` **DIIZINKAN** untuk dieksekusi kapan saja, **tanpa batas minggu berjalan** (cukup ownership PT atas plan), baik di saat plan masih `pending_review`, maupun jika **sudah `disetujui` atau di-`override` sebelumnya**.
+   - Catatan revisi (2026-10-03): batasan "harus plan minggu berjalan" dihapus agar PT tetap bisa memperbaiki/merombak plan saat klien/PT berhalangan (termasuk plan yang baru lewat). Jadwal latihan dipegang mutlak oleh PT, bukan Admin.
    - **Alasan**: PRD Bugarin mendiktekan *use case* spesifik: *"PT override karena klien cedera"*. Cedera bisa terjadi di tengah minggu (misal hari Rabu) setelah plan berstatus `disetujui` pada hari Senin. Demi keselamatan dan fleksibilitas *coaching*, PT harus selalu memiliki kuasa penuh merombak/meng-override rencana mingguan klien yang sedang berjalan tersebut.
    - Tidak ada *versioning* yang kompleks. Fitur *override* akan murni me-replace JSON di baris itu dan mengubah status kolom menjadi `override`.
 
 6. **Validasi Struktur Override JSON (Backend Zod)**
    - Meskipun frontend memiliki form terstruktur (bukan textarea mentah), Backend **WAJIB** memvalidasi *payload* JSON menggunakan Zod sebelum di-update ke *database*.
    - Payload harus divalidasi apakah struktur objek per item *workoutPlan* (hari, jam, jenis) dan *mealPlan* (waktu, menu, estimasiKalori) sesuai dan valid (terutama tipe *array*). 
-   - **Injeksi Lokasi Gym**: PT **TIDAK** mengirimkan field `lokasi` (bukan bagian dari payload). Sesuai pola AI, lokasi gym SELALU di-inject secara internal oleh backend menggunakan data `pt_profiles.tempat_gym` milik PT yang sedang login saat menyimpan override. Ini memastikan konsistensi lokasi latihan per PT.
+   - **Injeksi Lokasi Gym**: PT **TIDAK** mengirimkan field `lokasi` (bukan bagian dari payload; Zod `.strict()` menolak 400 bila dikirim). Lokasi gym SELALU di-inject secara internal oleh backend menggunakan data `pt_profiles.tempat_gym` milik PT yang sedang login saat menyimpan override. Bila `tempat_gym` null (data kotor), fallback `lokasi: "-"`. Ini memastikan konsistensi lokasi latihan per PT.
 
 7. **Format Grafik BB Historis**
    - Data `weight_logs` diubah (di-map) menjadi array sederhana berformat `{ tanggal: string, beratKg: number }`.
@@ -104,8 +106,9 @@ type KlienItem = {
 type DetailKlienResponse = {
   data: {
     profil: KlienItem & { 
-      usia: number; 
-      tinggiBadanCm: number; 
+      usia: number | null; 
+      jenisKelamin: "pria" | "wanita" | null; 
+      tinggiBadanCm: number | null; 
       bbAwalKg: number | null; 
       bbTujuanKg: number | null; 
       tujuan: string | null 
@@ -195,7 +198,7 @@ src/modules/pt/
 1. **Schema Validation (`pt.schema.ts`)**: Konfigurasikan Zod `overridePlanSchema` yang menguraikan format ketat struktur array objek `workoutPlan` dan `mealPlan`.
 2. **List Klien (`pt.service.ts`)**: Bikin function query `SELECT` data profil klien difilter `WHERE pt_id = req.user.id`.
 3. **Klien Detail (`pt.service.ts`)**: Lakukan *ownership check*, tarik biodata, cari progres aktif klien, lalu ekstrak `weight_logs` dan pastikan melakukan *ORDER BY tanggal ASC*.
-4. **Plan Read (`pt.service.ts`)**: Terapkan logika query `minggu_mulai DESC LIMIT 1` (identik layaknya di fitur `dashboard-pt`) bersama *ownership check*.
+4. **Plan Read (`pt.service.ts`)**: Terapkan logika query exact-match Senin UTC (`minggu_mulai = getStartOfWeekUtc()`, `ORDER BY generated_at DESC` bila duplikat) bersama *ownership check*.
 5. **Approve Plan (`pt.service.ts`)**: Implementasi `JOIN klien_profiles` demi *ownership check plan* -> seleksi jika status `pending_review` -> eksekusi update DB menjadi `disetujui`.
 6. **Override Plan (`pt.service.ts`)**: Implementasi *ownership check plan* -> validasi payload mentah pakai schema Zod -> timpa JSON di database dan ubah `status` ke `override` tanpa harus memedulikan status historis sebelumnya.
 7. **Controller & Router**: Sambung seluruh service dengan framework Express. Tangkap error ownership lalu paksa lempar status HTTP 404 *Data tidak ditemukan*.
@@ -228,7 +231,7 @@ src/modules/pt/
 
 - [ ] Seluruh endpoint List Klien, Detail Klien (dengan grafik Recharts array *ascending*), Retrieve Plan, Approve, dan Override terimplementasi.
 - [ ] Pemeriksaan validitas kepemilikan data (Ownership Check Ganda) terintegrasi pada endpoint ID dan sukses menutupi identitas klien lain dengan 404.
-- [ ] Logika `minggu_mulai DESC LIMIT 1` diterapkan identik untuk penentuan minggu yang sedang berjalan dengan *Dashboard PT*.
+- [ ] Logika exact-match Senin UTC (`getStartOfWeekUtc`) diterapkan identik untuk penentuan minggu berjalan dengan *Dashboard PT*.
 - [ ] Skenario Approve dilindungi dari pengerjaan dobel (dobel approve).
 - [ ] Skenario Override disahkan untuk dilakukan kapan pun di sepanjang status lifecycle plan (termasuk cedera).
 - [ ] Objek struktur manual (JSON Override) diamankan dengan verifikasi skema Zod ketat.

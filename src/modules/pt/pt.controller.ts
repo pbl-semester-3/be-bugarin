@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import { ptService } from "./pt.service";
+import { z } from "zod";
 import {
   respondPairingRequestSchema,
   updatePtProfileSchema,
   changePtPasswordSchema,
   changePtThemeSchema,
+  overridePlanSchema,
 } from "./pt.schema";
 
 export const ptController = {
@@ -49,6 +51,86 @@ export const ptController = {
       const userId = req.user.id;
       const parsedData = changePtThemeSchema.parse(req.body);
       const data = await ptService.changeTheme(userId, parsedData);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async listKlien(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const response = await ptService.listKlien(userId);
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getKlienDetail(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID klien tidak valid" });
+      }
+
+      const data = await ptService.getKlienDetail(userId, paramResult.data);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getKlienWeeklyPlan(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID klien tidak valid" });
+      }
+
+      const data = await ptService.getKlienWeeklyPlan(userId, paramResult.data);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async approveWeeklyPlan(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID plan tidak valid" });
+      }
+
+      const data = await ptService.approveWeeklyPlan(userId, paramResult.data);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async overrideWeeklyPlan(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID plan tidak valid" });
+      }
+
+      const parsedData = overridePlanSchema.parse(req.body);
+      const data = await ptService.overrideWeeklyPlan(userId, paramResult.data, parsedData);
       res.json({ data });
     } catch (error) {
       next(error);

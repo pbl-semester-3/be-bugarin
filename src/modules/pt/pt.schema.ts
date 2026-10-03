@@ -28,3 +28,24 @@ export const changePtThemeSchema = z.object({
 export type UpdatePtProfileInput = z.infer<typeof updatePtProfileSchema>;
 export type ChangePtPasswordInput = z.infer<typeof changePtPasswordSchema>;
 export type ChangePtThemeInput = z.infer<typeof changePtThemeSchema>;
+
+// Override weekly plan: PT TIDAK mengirim `lokasi` (backend inject dari tempat_gym).
+// .strict() di semua level agar field ekstra (mis. lokasi) ditolak 400.
+export const overridePlanSchema = z.object({
+  workoutPlan: z.array(
+    z.object({
+      hari: z.string().min(1, "Hari tidak boleh kosong"),
+      jam: z.string().min(1, "Jam tidak boleh kosong"),
+      jenis: z.string().min(1, "Jenis tidak boleh kosong"),
+    }).strict(),
+  ).min(1, "Workout plan minimal 1 jadwal"),
+  mealPlan: z.array(
+    z.object({
+      waktu: z.string().min(1, "Waktu tidak boleh kosong"),
+      menu: z.string().min(1, "Menu tidak boleh kosong"),
+      estimasiKalori: z.number().positive("Estimasi kalori harus positif"),
+    }).strict(),
+  ).min(1, "Meal plan minimal 1 jadwal"),
+}).strict();
+
+export type OverridePlanInput = z.infer<typeof overridePlanSchema>;
