@@ -4,6 +4,7 @@ import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activity
 import { AppError } from "../../middlewares/error-handler";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
+import { getStartOfWeekUtc } from "../../utils/week";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 import { estimateFoodCalories } from "../ai/food-estimation";
 import type { 
@@ -32,15 +33,8 @@ function shiftUtcDate(dateStr: string, deltaDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-// TODO(tech-debt): Rumus awal minggu di sini ((getDay() || 7) + setHours) TIDAK identik dengan
-// yang dipakai startNewProgressCycle() ((getDate() - getDay() + 1)). Pada hari Minggu kedua rumus
-// menghasilkan Senin yang berbeda, sehingga weekly_plan hasil generate berisiko tidak muncul di
-// endpoint minggu berjalan. Detail: updates/2026-10-02-inkonsistensi-rumus-awal-minggu.md
 async function getCurrentWeeklyPlanRecord(klienProfileId: number) {
-  const date = new Date();
-  const day = date.getDay() || 7;
-  if (day !== 1) date.setHours(-24 * (day - 1));
-  const startOfWeek = date.toISOString().slice(0, 10);
+  const startOfWeek = getStartOfWeekUtc();
 
   return db.query.weeklyPlans.findFirst({
     where: and(
@@ -49,6 +43,15 @@ async function getCurrentWeeklyPlanRecord(klienProfileId: number) {
     ),
     orderBy: [desc(weeklyPlans.generatedAt)],
   });
+}
+
+// Cegah duplikat baris weekly_plans untuk (klien, minggu) yang sama — penting karena
+// cron bisa terpanggil lebih dari sekali dalam seminggu. Lihat CATATAN.
+async function hasWeeklyPlanForWeek(klienId: number, mingguMulai: string): Promise<boolean> {
+  const existing = await db.query.weeklyPlans.findFirst({
+    where: and(eq(weeklyPlans.klienId, klienId), eq(weeklyPlans.mingguMulai, mingguMulai)),
+  });
+  return Boolean(existing);
 }
 
 // Streak = jumlah hari unik (activity_logs OR meal_logs) di dalam window siklus.
@@ -276,13 +279,10 @@ export const klienService = {
         tempatGym: profile.pt.tempatGym || "",
       })
       .then(async (plan) => {
-        // TODO(tech-debt): Rumus awal minggu di sini (getDate() - getDay() + 1) TIDAK identik dengan
-        // getCurrentWeeklyPlanRecord() ((getDay() || 7) + setHours). Pada hari Minggu kedua rumus
-        // menghasilkan Senin yang berbeda, sehingga weekly_plan hasil generate berisiko tidak muncul
-        // di endpoint minggu berjalan. Detail: updates/2026-10-02-inkonsistensi-rumus-awal-minggu.md
-        const date = new Date();
-        const startOfWeek = new Date(date.setDate(date.getDate() - date.getDay() + 1)).toISOString().slice(0, 10);
-        
+        const startOfWeek = getStartOfWeekUtc();
+
+        if (await hasWeeklyPlanForWeek(profile.id, startOfWeek)) return;
+
         await db.insert(weeklyPlans).values({
           klienId: profile.id,
           mingguMulai: startOfWeek,

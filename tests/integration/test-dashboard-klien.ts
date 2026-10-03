@@ -30,6 +30,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../../src/config/env";
 import * as argon2 from "argon2";
 import { recalculateActiveCycleStreak } from "../../src/modules/klien/klien.service";
+import { getStartOfWeekUtc } from "../../src/utils/week";
 
 const PORT = 9992;
 
@@ -47,13 +48,6 @@ function shiftUtcDate(dateStr: string, deltaDays: number): string {
   const [year, month, day] = dateStr.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   date.setUTCDate(date.getUTCDate() + deltaDays);
-  return date.toISOString().slice(0, 10);
-}
-
-function startOfWeekUtc(): string {
-  const date = new Date();
-  const day = date.getDay() || 7;
-  if (day !== 1) date.setHours(-24 * (day - 1));
   return date.toISOString().slice(0, 10);
 }
 
@@ -159,7 +153,7 @@ async function runTests() {
     const ptProfile = await db.insert(ptProfiles).values({ userId: ptUser[0].insertId, nama: "PT Dashboard", spesialisasi: "turun_bb", tempatGym: "Gym Dash" });
     const ptId = ptProfile[0].insertId;
 
-    const startOfWeek = startOfWeekUtc();
+    const startOfWeek = getStartOfWeekUtc();
     const workoutItem = { hari: "Senin", jam: "16:00", jenis: "Upper Body", lokasi: "Gym Dash" };
 
     // K0: tanpa PT, TANPA cycle aktif, ada histori log (membuktikan streak 0 tanpa siklus)

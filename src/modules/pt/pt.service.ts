@@ -2,6 +2,7 @@ import { eq, desc, and, isNotNull, ne } from "drizzle-orm";
 import { db } from "../../config/db";
 import { klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
+import { getStartOfWeekUtc } from "../../utils/week";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 
 export const ptService = {
@@ -162,12 +163,16 @@ export const ptService = {
               tempatGym: ptProfile.tempatGym,
             });
             
-            // start of current week
-            const date = new Date();
-            const day = date.getDay() || 7; 
-            date.setHours(-24 * (day - 1));
-            const startOfWeek = date.toISOString().slice(0, 10);
-            
+            const startOfWeek = getStartOfWeekUtc();
+
+            const existingPlan = await db.query.weeklyPlans.findFirst({
+              where: and(
+                eq(weeklyPlans.klienId, request.klienId),
+                eq(weeklyPlans.mingguMulai, startOfWeek),
+              ),
+            });
+            if (existingPlan) return;
+
             await db.insert(weeklyPlans).values({
               klienId: request.klienId,
               mingguMulai: startOfWeek,
