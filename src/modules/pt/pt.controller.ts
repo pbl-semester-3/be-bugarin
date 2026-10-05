@@ -7,6 +7,7 @@ import {
   changePtPasswordSchema,
   changePtThemeSchema,
   overridePlanSchema,
+  createFeedbackSchema,
 } from "./pt.schema";
 
 export const ptController = {
@@ -132,6 +133,24 @@ export const ptController = {
       const parsedData = overridePlanSchema.parse(req.body);
       const data = await ptService.overrideWeeklyPlan(userId, paramResult.data, parsedData);
       res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async createFeedback(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID klien tidak valid" });
+      }
+
+      const parsedData = createFeedbackSchema.parse(req.body);
+      const data = await ptService.createFeedback(userId, paramResult.data, parsedData.pesan);
+      res.status(201).json({ data });
     } catch (error) {
       next(error);
     }

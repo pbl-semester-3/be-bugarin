@@ -20,6 +20,9 @@ router.get("/klien/:id/weekly-plan", authGuard(["pt"]), ptController.getKlienWee
 router.put("/weekly-plan/:id/approve", authGuard(["pt"]), ptController.approveWeeklyPlan);
 router.put("/weekly-plan/:id/override", authGuard(["pt"]), ptController.overrideWeeklyPlan);
 
+// Endpoint Feedback PT ke Klien
+router.post("/klien/:id/feedbacks", authGuard(["pt"]), ptController.createFeedback);
+
 // Endpoint PT Ku (Rekomendasi PT untuk Klien)
 // Harus di-mount di /pt (di app.ts: app.use("/pt", ptRoutes))
 router.get("/recommendations", authGuard(["klien"]), ptController.getPtRecommendations);
