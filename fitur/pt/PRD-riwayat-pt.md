@@ -114,7 +114,7 @@ src/modules/pt/
 ## Urutan Implementasi
 
 1. **Service (`pt.service.ts`) - Ambil Klien Dasar**:
-   - Tarik query `klien_profiles` (SELECT id, nama, usia, jenis_kelamin) yang difilter oleh identitas pelatih `pt_id === req.user.id`. Urutkan berdasar alfabet `nama ASC`. 
+   - Tarik query `klien_profiles` (SELECT id, nama, usia, jenis_kelamin) yang difilter oleh `pt_id === pt_profiles.id` milik PT login (resolve `pt_profiles.id` dari `req.user.id` terlebih dahulu). Urutkan berdasar alfabet `nama ASC`. 
    - Bila data tiada/kosong, hentikan aliran dan kirimkan murni `data: []` ke Frontend.
 2. **Service - Tarik Batch Data BB (Anti N+1)**:
    - Buat variabel list `id` gabungan klien.
