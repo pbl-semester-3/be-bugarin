@@ -137,6 +137,17 @@ export const ptController = {
     }
   },
 
+  async getDashboardSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await ptService.getDashboardSummaryPT(userId);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getPtRecommendations(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

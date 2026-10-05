@@ -1,11 +1,24 @@
-import { eq, desc, and, isNotNull, ne, asc } from "drizzle-orm";
+import { eq, desc, and, isNotNull, ne, asc, inArray } from "drizzle-orm";
 import { db } from "../../config/db";
 import { users, klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans, weightLogs } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { getStartOfWeekUtc } from "../../utils/week";
+import { normalizeHari, normalizeJam, getDayOrder } from "../../utils/day";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 import * as argon2 from "argon2";
 import type { UpdatePtProfileInput, ChangePtPasswordInput, ChangePtThemeInput, OverridePlanInput } from "./pt.schema";
+
+export type DashboardSummaryPT = {
+  jumlahKlienAktif: number;
+  jadwalLatihan: {
+    klienId: number;
+    namaKlien: string;
+    hari: string;
+    jam: string;
+    jenis: string;
+    lokasi: string;
+  }[];
+};
 
 // Ownership convention: resolve pt_profiles dari users.id (req.user.id). JANGAN bandingkan
 // users.id langsung ke kolom pt_id — keduanya tidak dijamin sama.
@@ -213,6 +226,65 @@ export const ptService = {
       workoutPlan,
       mealPlan: data.mealPlan,
     };
+  },
+
+  async getDashboardSummaryPT(ptUserId: number): Promise<DashboardSummaryPT> {
+    const ptProfile = await db.query.ptProfiles.findFirst({
+      where: eq(ptProfiles.userId, ptUserId),
+      columns: { id: true, tempatGym: true },
+    });
+    if (!ptProfile) throw new AppError(404, "Profil PT tidak ditemukan");
+
+    const klienList = await db.query.klienProfiles.findMany({
+      where: eq(klienProfiles.ptId, ptProfile.id),
+      columns: { id: true, nama: true },
+    });
+
+    if (klienList.length === 0) {
+      return { jumlahKlienAktif: 0, jadwalLatihan: [] };
+    }
+
+    const klienIds = klienList.map((k) => k.id);
+    const planRows = await db.query.weeklyPlans.findMany({
+      where: and(
+        inArray(weeklyPlans.klienId, klienIds),
+        eq(weeklyPlans.mingguMulai, getStartOfWeekUtc()),
+        inArray(weeklyPlans.status, ["disetujui", "override"]),
+      ),
+      orderBy: [desc(weeklyPlans.generatedAt)],
+    });
+
+    const klienNameById = new Map(klienList.map((k) => [k.id, k.nama]));
+    const seenKlien = new Set<number>();
+    const lokasi = ptProfile.tempatGym ?? "-";
+
+    const jadwalLatihan: DashboardSummaryPT["jadwalLatihan"] = [];
+    for (const plan of planRows) {
+      // hanya plan terbaru per klien (row sudah urut generatedAt DESC)
+      if (seenKlien.has(plan.klienId)) continue;
+      seenKlien.add(plan.klienId);
+
+      const namaKlien = klienNameById.get(plan.klienId);
+      if (!namaKlien) continue;
+
+      for (const item of plan.workoutPlan) {
+        jadwalLatihan.push({
+          klienId: plan.klienId,
+          namaKlien,
+          hari: normalizeHari(item.hari),
+          jam: normalizeJam(item.jam),
+          jenis: item.jenis,
+          lokasi,
+        });
+      }
+    }
+
+    jadwalLatihan.sort((a, b) => {
+      const dayDiff = getDayOrder(a.hari) - getDayOrder(b.hari);
+      return dayDiff !== 0 ? dayDiff : a.jam.localeCompare(b.jam);
+    });
+
+    return { jumlahKlienAktif: klienList.length, jadwalLatihan };
   },
 
   async getPtRecommendations(klienUserId: number) {

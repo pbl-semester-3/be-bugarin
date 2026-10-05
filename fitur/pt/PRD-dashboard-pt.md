@@ -121,7 +121,7 @@ src/modules/pt/
 ## Urutan Implementasi
 
 1. **Service (`pt.service.ts`)**:
-   - Hitung (COUNT) jumlah `klien_profiles` yang field `pt_id`-nya sama dengan `req.user.id`.
+   - Hitung jumlah `klien_profiles` yang field `pt_id`-nya sama dengan `pt_profiles.id` milik PT login (resolve `pt_profiles.id` dari `req.user.id` terlebih dahulu).
    - Ambil profil PT saat ini untuk mendapatkan data `tempat_gym`.
    - Lakukan JOIN dari `klien_profiles` (milik PT ini) ke `weekly_plans` untuk mengambil plan minggu berjalan menggunakan exact-match Senin UTC (`minggu_mulai = getStartOfWeekUtc()`, `ORDER BY generated_at DESC` bila duplikat) DAN pastikan `status IN ('disetujui', 'override')`.
    - Loop dan *flatten* isi kolom JSON `workout_plan` dari hasil query, sematkan `nama` klien dari row tersebut, dan sematkan `tempat_gym` ke setiap item.

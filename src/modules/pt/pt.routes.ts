@@ -10,6 +10,9 @@ router.put("/profile", authGuard(["pt"]), ptController.updateProfile);
 router.put("/password", authGuard(["pt"]), ptController.changePassword);
 router.put("/theme", authGuard(["pt"]), ptController.changeTheme);
 
+// Endpoint Dashboard PT
+router.get("/dashboard-summary", authGuard(["pt"]), ptController.getDashboardSummary);
+
 // Endpoint Klien Detail PT
 router.get("/klien", authGuard(["pt"]), ptController.listKlien);
 router.get("/klien/:id", authGuard(["pt"]), ptController.getKlienDetail);
