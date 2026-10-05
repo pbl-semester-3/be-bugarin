@@ -93,9 +93,11 @@ type DashboardSummary = {
     spesialisasi: "turun_bb" | "naik_bb";
   } | null;
   targetKaloriHariIni: number | null;
+  kaloriMasukHariIni: number | null; // SUM meal_logs hari ini; 0 bila ada cycle aktif tanpa log; null bila tidak ada cycle aktif
   streak: number;
   jadwalMingguan: WorkoutPlanItem[]; // Menggunakan struct JSON database, Array kosong jika masih pending_review
   isReminderActive: boolean;
+  unreadFeedbackCount: number; // jumlah feedbacks dibaca=false (tambahan dari fitur feedback-klien)
 };
 
 type WorkoutPlanItem = {
