@@ -1,6 +1,6 @@
 import { eq, desc, and, isNotNull, ne, asc, inArray } from "drizzle-orm";
 import { db } from "../../config/db";
-import { users, klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans, weightLogs } from "../../db/schema";
+import { users, klienProfiles, ptProfiles, pairingRequests, progressCycles, weeklyPlans, weightLogs, feedbacks } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { getStartOfWeekUtc } from "../../utils/week";
 import { normalizeHari, normalizeJam, getDayOrder } from "../../utils/day";
@@ -52,6 +52,15 @@ async function resolvePtProfileId(ptUserId: number): Promise<number> {
   });
   if (!profile) throw new AppError(404, "Profil PT tidak ditemukan");
   return profile.id;
+}
+
+// Ownership klien: klien harus ter-pairing ke PT ini. Gagal -> 404.
+async function getOwnedKlien(ptProfileId: number, klienId: number) {
+  const klien = await db.query.klienProfiles.findFirst({
+    where: and(eq(klienProfiles.id, klienId), eq(klienProfiles.ptId, ptProfileId)),
+  });
+  if (!klien) throw new AppError(404, "Data tidak ditemukan");
+  return klien;
 }
 
 // Ownership plan: plan harus milik klien yang di-pairing ke PT ini. Gagal -> 404.
@@ -129,11 +138,7 @@ export const ptService = {
 
   async getKlienDetail(ptUserId: number, klienId: number) {
     const ptProfileId = await resolvePtProfileId(ptUserId);
-
-    const klien = await db.query.klienProfiles.findFirst({
-      where: and(eq(klienProfiles.id, klienId), eq(klienProfiles.ptId, ptProfileId)),
-    });
-    if (!klien) throw new AppError(404, "Data tidak ditemukan");
+    const klien = await getOwnedKlien(ptProfileId, klienId);
 
     const activeCycle = await db.query.progressCycles.findFirst({
       where: and(eq(progressCycles.klienId, klien.id), eq(progressCycles.status, "aktif")),
@@ -161,11 +166,7 @@ export const ptService = {
 
   async getKlienWeeklyPlan(ptUserId: number, klienId: number) {
     const ptProfileId = await resolvePtProfileId(ptUserId);
-
-    const klien = await db.query.klienProfiles.findFirst({
-      where: and(eq(klienProfiles.id, klienId), eq(klienProfiles.ptId, ptProfileId)),
-    });
-    if (!klien) throw new AppError(404, "Data tidak ditemukan");
+    const klien = await getOwnedKlien(ptProfileId, klienId);
 
     const plan = await db.query.weeklyPlans.findFirst({
       where: and(
@@ -225,6 +226,35 @@ export const ptService = {
       status: "override" as const,
       workoutPlan,
       mealPlan: data.mealPlan,
+    };
+  },
+
+  async createFeedback(ptUserId: number, klienId: number, pesan: string) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+    const klien = await getOwnedKlien(ptProfileId, klienId);
+
+    const ins = await db.insert(feedbacks).values({
+      klienId: klien.id,
+      ptId: ptProfileId,
+      source: "pt",
+      pesan,
+      dibaca: false,
+      balasanKlien: null,
+    });
+
+    const created = await db.query.feedbacks.findFirst({
+      where: eq(feedbacks.id, ins[0].insertId),
+    });
+
+    return {
+      id: created!.id,
+      klienId: created!.klienId,
+      ptId: created!.ptId,
+      source: created!.source,
+      pesan: created!.pesan,
+      dibaca: created!.dibaca,
+      balasanKlien: created!.balasanKlien,
+      createdAt: created!.createdAt,
     };
   },
 

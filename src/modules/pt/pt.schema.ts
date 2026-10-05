@@ -49,3 +49,9 @@ export const overridePlanSchema = z.object({
 }).strict();
 
 export type OverridePlanInput = z.infer<typeof overridePlanSchema>;
+
+export const createFeedbackSchema = z.object({
+  pesan: z.string().trim().min(5, "Pesan feedback tidak boleh terlalu singkat").max(2000, "Pesan terlalu panjang"),
+});
+
+export type CreateFeedbackInput = z.infer<typeof createFeedbackSchema>;
