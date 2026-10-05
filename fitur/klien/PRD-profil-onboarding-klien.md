@@ -72,6 +72,29 @@ weightLogSchema: { beratBadanKg: number.positive() }
 newCycleSchema: { bbTujuanKg: number.positive(), tujuan: enum(['turun_bb','naik_bb']), durasiHari: number.int().positive() }
 ```
 
+## Response Shape: `GET /klien/profile`
+
+```typescript
+// { data: KlienProfileResponse }
+type KlienProfileResponse = {
+  id: number;
+  userId: number;
+  nama: string;
+  usia: number | null;
+  jenisKelamin: "pria" | "wanita" | null;
+  alergiMakanan: string | null;
+  tinggiBadanCm: number | null;
+  ptId: number | null;
+  user: { email: string; username: string; tema: "siang" | "malam"; role: "klien" | "pt" | "admin" };
+  profileComplete: boolean;
+  activeCycle: ProgressCycle | null; // null eksplisit bila tidak ada cycle aktif
+  bbSekarangKg: number | null;       // dari weight_logs terakhir (tanggal DESC, id DESC)
+  createdAt: string;                 // ISO 8601, dari users.created_at
+};
+```
+
+> **Keamanan (revisi 2026-10-05):** response WAJIB memakai mapping eksplisit. JANGAN spread mentah baris `users`/`klien_profiles`, agar `passwordHash` dan kolom internal tidak bocor (lihat `bugarin-mobile/docs/CATATAN.md` §6.1).
+
 ## Dependency ke Fitur Lain
 
 - **`feat/pt-ku-klien`**: kalau klien belum punya PT saat cycle dibuat, generate Weekly Plan di-skip di sini — `feat/pt-ku-klien` yang bertanggung jawab memanggil `generateWeeklyPlan` begitu pairing request diterima PT.

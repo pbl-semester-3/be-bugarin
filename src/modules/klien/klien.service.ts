@@ -20,6 +20,7 @@ import type {
 export type DashboardSummary = {
   pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null } | null;
   targetKaloriHariIni: number | null;
+  kaloriMasukHariIni: number | null;
   streak: number;
   jadwalMingguan: WorkoutPlanItem[];
   isReminderActive: boolean;
@@ -111,6 +112,11 @@ export const klienService = {
       where: and(eq(progressCycles.klienId, profile.id), eq(progressCycles.status, "aktif")),
     });
 
+    const lastWeight = await db.query.weightLogs.findFirst({
+      where: eq(weightLogs.klienId, profile.id),
+      orderBy: [desc(weightLogs.tanggal), desc(weightLogs.id)],
+    });
+
     const isProfileComplete = Boolean(
       profile.usia && 
       profile.jenisKelamin && 
@@ -118,10 +124,26 @@ export const klienService = {
       activeCycle
     );
 
+    // Mapping eksplisit — JANGAN spread mentah (cegah kebocoran passwordHash & field internal users).
     return {
-      ...profile,
+      id: profile.id,
+      userId: profile.userId,
+      nama: profile.nama,
+      usia: profile.usia,
+      jenisKelamin: profile.jenisKelamin,
+      alergiMakanan: profile.alergiMakanan,
+      tinggiBadanCm: profile.tinggiBadanCm,
+      ptId: profile.ptId,
+      user: {
+        email: profile.user.email,
+        username: profile.user.username,
+        tema: profile.user.tema,
+        role: profile.user.role,
+      },
       profileComplete: isProfileComplete,
-      activeCycle,
+      activeCycle: activeCycle ?? null,
+      bbSekarangKg: lastWeight?.beratBadanKg ?? null,
+      createdAt: profile.user.createdAt,
     };
   },
 
@@ -480,7 +502,7 @@ export const klienService = {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    const [activeCycle, weeklyPlan, unreadRows] = await Promise.all([
+    const [activeCycle, weeklyPlan, unreadRows, mealRows] = await Promise.all([
       db.query.progressCycles.findFirst({
         where: and(eq(progressCycles.klienId, profile.id), eq(progressCycles.status, "aktif")),
         orderBy: [desc(progressCycles.tanggalMulai)],
@@ -489,9 +511,13 @@ export const klienService = {
       db.select({ total: sql<number>`COUNT(*)` })
         .from(feedbacks)
         .where(and(eq(feedbacks.klienId, profile.id), eq(feedbacks.dibaca, false))),
+      db.select({ total: sql<string>`SUM(${mealLogs.kaloriMasuk})` })
+        .from(mealLogs)
+        .where(and(eq(mealLogs.klienId, profile.id), eq(mealLogs.tanggal, today))),
     ]);
 
     const streak = activeCycle ? activeCycle.streak : 0;
+    const kaloriMasukHariIni = activeCycle ? Number(mealRows[0]?.total ?? 0) : null;
 
     const jadwalMingguan =
       weeklyPlan && weeklyPlan.status !== "pending_review" ? weeklyPlan.workoutPlan : [];
@@ -507,6 +533,7 @@ export const klienService = {
     return {
       pt,
       targetKaloriHariIni: activeCycle ? activeCycle.targetKaloriPerHari : null,
+      kaloriMasukHariIni,
       streak,
       jadwalMingguan,
       isReminderActive,
