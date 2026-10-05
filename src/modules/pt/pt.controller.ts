@@ -167,6 +167,17 @@ export const ptController = {
     }
   },
 
+  async getRiwayatPT(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const response = await ptService.getRiwayatPT(userId);
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getPtRecommendations(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

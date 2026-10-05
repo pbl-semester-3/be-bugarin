@@ -317,6 +317,60 @@ export const ptService = {
     return { jumlahKlienAktif: klienList.length, jadwalLatihan };
   },
 
+  async getRiwayatPT(ptUserId: number) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+
+    const klienList = await db.query.klienProfiles.findMany({
+      where: eq(klienProfiles.ptId, ptProfileId),
+      columns: { id: true, nama: true, usia: true, jenisKelamin: true },
+      orderBy: [asc(klienProfiles.nama)],
+    });
+
+    if (klienList.length === 0) {
+      return { data: [], meta: { total: 0 } };
+    }
+
+    const klienIds = klienList.map((k) => k.id);
+
+    // Anti-N+1: batch query, ambil baris pertama per klien di memori (bukan query per klien).
+    const cycleRows = await db.select({
+      klienId: progressCycles.klienId,
+      bbAwalKg: progressCycles.bbAwalKg,
+    })
+      .from(progressCycles)
+      .where(inArray(progressCycles.klienId, klienIds))
+      .orderBy(asc(progressCycles.tanggalMulai), asc(progressCycles.id));
+
+    const weightRows = await db.select({
+      klienId: weightLogs.klienId,
+      beratBadanKg: weightLogs.beratBadanKg,
+    })
+      .from(weightLogs)
+      .where(inArray(weightLogs.klienId, klienIds))
+      .orderBy(desc(weightLogs.tanggal), desc(weightLogs.id));
+
+    const bbAwalByKlien = new Map<number, number>();
+    for (const row of cycleRows) {
+      if (!bbAwalByKlien.has(row.klienId)) bbAwalByKlien.set(row.klienId, row.bbAwalKg);
+    }
+
+    const bbSekarangByKlien = new Map<number, number>();
+    for (const row of weightRows) {
+      if (!bbSekarangByKlien.has(row.klienId)) bbSekarangByKlien.set(row.klienId, row.beratBadanKg);
+    }
+
+    const data = klienList.map((k) => ({
+      id: k.id,
+      nama: k.nama,
+      usia: k.usia,
+      jenisKelamin: k.jenisKelamin,
+      bbAwalKg: bbAwalByKlien.get(k.id) ?? null,
+      bbSekarangKg: bbSekarangByKlien.get(k.id) ?? null,
+    }));
+
+    return { data, meta: { total: data.length } };
+  },
+
   async getPtRecommendations(klienUserId: number) {
     const klienProfile = await db.query.klienProfiles.findFirst({
       where: eq(klienProfiles.userId, klienUserId),
