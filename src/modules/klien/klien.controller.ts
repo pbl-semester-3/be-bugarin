@@ -37,6 +37,31 @@ export const klienController = {
     }
   },
 
+  async uploadProfilePhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      if (!req.file) {
+        return res.status(400).json({ error: "File foto wajib dikirim (field 'foto')" });
+      }
+      const data = await klienService.uploadProfilePhoto(userId, req.file);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteProfilePhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await klienService.deleteProfilePhoto(userId);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async changePassword(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

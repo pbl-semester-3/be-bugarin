@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authGuard } from "../../middlewares/auth-guard";
+import { uploadSinglePhoto } from "../../middlewares/upload";
 import { klienController } from "./klien.controller";
 
 const router = Router();
@@ -7,6 +8,8 @@ const router = Router();
 // Endpoint Profil & Onboarding
 router.get("/profile", authGuard(["klien"]), klienController.getProfile);
 router.put("/profile", authGuard(["klien"]), klienController.updateProfile);
+router.post("/profile/photo", authGuard(["klien"]), uploadSinglePhoto(), klienController.uploadProfilePhoto);
+router.delete("/profile/photo", authGuard(["klien"]), klienController.deleteProfilePhoto);
 router.put("/password", authGuard(["klien"]), klienController.changePassword);
 router.put("/theme", authGuard(["klien"]), klienController.changeTheme);
 

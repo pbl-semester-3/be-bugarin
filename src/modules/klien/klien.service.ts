@@ -2,6 +2,8 @@ import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { db } from "../../config/db";
 import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests, feedbacks, type WorkoutPlanItem } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
+import { cloudinary, isCloudinaryConfigured } from "../../config/cloudinary";
+import { env } from "../../config/env";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
 import { getStartOfWeekUtc } from "../../utils/week";
@@ -16,6 +18,12 @@ import type {
   CreateActivityLogInput,
   CreateMealLogInput
 } from "./klien.schema";
+
+// URL foto dibangun saat response dari public_id Cloudinary (DB tidak menyimpan URL absolut).
+function buildFotoUrl(publicId: string | null): string | null {
+  if (!publicId) return null;
+  return cloudinary.url(publicId, { secure: true });
+}
 
 export type DashboardSummary = {
   pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null } | null;
@@ -143,8 +151,66 @@ export const klienService = {
       profileComplete: isProfileComplete,
       activeCycle: activeCycle ?? null,
       bbSekarangKg: lastWeight?.beratBadanKg ?? null,
+      fotoUrl: buildFotoUrl(profile.fotoPublicId),
       createdAt: profile.user.createdAt,
     };
+  },
+
+  async uploadProfilePhoto(userId: number, file: Express.Multer.File) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    if (!isCloudinaryConfigured()) {
+      throw new AppError(503, "Layanan foto belum dikonfigurasi");
+    }
+
+    const result = await new Promise<{ public_id: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: env.CLOUDINARY_FOLDER, resource_type: "image" },
+        (error, uploaded) => {
+          if (error || !uploaded) {
+            reject(error ?? new Error("Upload foto gagal"));
+            return;
+          }
+          resolve(uploaded);
+        },
+      );
+      stream.end(file.buffer);
+    });
+
+    const oldPublicId = profile.fotoPublicId;
+    await db.update(klienProfiles)
+      .set({ fotoPublicId: result.public_id })
+      .where(eq(klienProfiles.id, profile.id));
+
+    if (oldPublicId && oldPublicId !== result.public_id) {
+      await cloudinary.uploader.destroy(oldPublicId).catch(() => undefined);
+    }
+
+    return { fotoUrl: buildFotoUrl(result.public_id) };
+  },
+
+  async deleteProfilePhoto(userId: number) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    if (!profile.fotoPublicId) {
+      throw new AppError(404, "Foto tidak ditemukan");
+    }
+
+    if (isCloudinaryConfigured()) {
+      await cloudinary.uploader.destroy(profile.fotoPublicId).catch(() => undefined);
+    }
+
+    await db.update(klienProfiles)
+      .set({ fotoPublicId: null })
+      .where(eq(klienProfiles.id, profile.id));
+
+    return { fotoUrl: null };
   },
 
   async updateProfile(userId: number, data: UpdateProfileInput) {

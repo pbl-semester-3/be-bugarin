@@ -15,6 +15,13 @@
       "when": 1790949629154,
       "tag": "0001_orange_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791380010523,
+      "tag": "0002_cheerful_boomer",
+      "breakpoints": true
     }
   ]
 }
