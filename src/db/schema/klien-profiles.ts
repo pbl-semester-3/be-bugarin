@@ -16,6 +16,8 @@ export const klienProfiles = mysqlTable("klien_profiles", {
   tinggiBadanCm: float("tinggi_badan_cm"),
   // PT aktif saat ini — nullable, kosong sebelum klien punya PT (lihat pairing_requests).
   ptId: int("pt_id").references(() => ptProfiles.id),
+  // public_id Cloudinary (bukan URL absolut). URL dibangun saat response. Nullable = belum ada foto.
+  fotoPublicId: varchar("foto_public_id", { length: 255 }),
 }, (table) => ({
   ptIdIdx: index("idx_klien_profiles_pt_id").on(table.ptId),
 }));

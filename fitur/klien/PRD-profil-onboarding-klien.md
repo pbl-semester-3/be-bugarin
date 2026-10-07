@@ -89,9 +89,21 @@ type KlienProfileResponse = {
   profileComplete: boolean;
   activeCycle: ProgressCycle | null; // null eksplisit bila tidak ada cycle aktif
   bbSekarangKg: number | null;       // dari weight_logs terakhir (tanggal DESC, id DESC)
+  fotoUrl: string | null;            // URL Cloudinary (dibangun dari foto_public_id); null bila belum ada
   createdAt: string;                 // ISO 8601, dari users.created_at
 };
 ```
+
+## Foto Profil (Cloudinary)
+
+| Method & Path | Auth | Fungsi |
+|---|---|---|
+| `POST /klien/profile/photo` | Klien | Upload foto (multipart, field `foto`) → `{ data: { fotoUrl } }` |
+| `DELETE /klien/profile/photo` | Klien | Hapus foto sendiri → `{ data: { fotoUrl: null } }`; 404 bila belum ada foto |
+
+- Batas ukuran **2 MB**, format `image/jpeg|png|webp`.
+- DB menyimpan `klien_profiles.foto_public_id` (identifier Cloudinary, bukan URL absolut); `fotoUrl` dibangun saat response via SDK.
+- Upload ulang akan menimpa (`destroy` public_id lama). Kredensial lewat env `CLOUDINARY_URL`; bila kosong, upload mengembalikan 503.
 
 > **Keamanan (revisi 2026-10-05):** response WAJIB memakai mapping eksplisit. JANGAN spread mentah baris `users`/`klien_profiles`, agar `passwordHash` dan kolom internal tidak bocor (lihat `bugarin-mobile/docs/CATATAN.md` §6.1).
 

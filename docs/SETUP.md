@@ -20,6 +20,7 @@ cp .env.example .env
 - `JWT_SECRET` — generate: `openssl rand -base64 32`
 - `GEMINI_API_KEY` — ambil dari https://aistudio.google.com/apikey (boleh pakai API key sendiri untuk dev lokal)
 - `CRON_SECRET` — string acak bebas, buat lindungi endpoint trigger cron
+- `CLOUDINARY_URL` — (opsional) untuk foto profil klien; salin baris "API environment variable" dari dashboard Cloudinary (format `cloudinary://key:secret@cloud_name`). Kalau kosong, endpoint foto mengembalikan 503.
 - `DATABASE_URL` — biarkan default kalau pakai `docker compose` (port 3307, sengaja beda dari default 3306 Laragon/MySQL lokal biar tidak bentrok)
 
 ```bash

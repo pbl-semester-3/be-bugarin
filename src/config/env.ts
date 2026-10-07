@@ -9,6 +9,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   CRON_SECRET: z.string().min(1),
+  // Opsional: format cloudinary://<api_key>:<api_secret>@<cloud_name>. Kalau kosong,
+  // endpoint foto profil mengembalikan 503 (fitur foto tidak aktif) — tidak mematikan app.
+  CLOUDINARY_URL: z.string().min(1).optional(),
+  CLOUDINARY_FOLDER: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse(process.env);
