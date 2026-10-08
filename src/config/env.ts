@@ -13,6 +13,8 @@ const envSchema = z.object({
   // endpoint foto profil mengembalikan 503 (fitur foto tidak aktif) — tidak mematikan app.
   CLOUDINARY_URL: z.string().min(1).optional(),
   CLOUDINARY_FOLDER: z.string().min(1).optional(),
+  // Opsional: Google OAuth client ID (audience). Kalau kosong, endpoint oauth google 503.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse(process.env);
