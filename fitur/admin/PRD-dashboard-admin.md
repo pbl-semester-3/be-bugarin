@@ -30,11 +30,11 @@ Fitur ini menyediakan sajian metrik tunggal untuk mengisi beranda (Dashboard) We
 
 ## Business Rules
 
-1. **Pemilihan Metrik Inti (Keputusan Produk Backend)**: Karena spesifikasi *Frontend* menyerahkan keleluasaan pada implementasi *Backend*, 4 (empat) metrik ini ditetapkan secara solid sebagai keluaran API:
-   - `totalKlien`: Jumlah seluruh akun klien yang terdaftar di `klien_profiles` (mencerminkan perolehan *user base* utama/konsumen target platform).
-   - `totalPt`: Jumlah seluruh akun Personal Trainer yang ada di `pt_profiles` (mencerminkan ketersediaan suplai penyedia jasa pelatihan dalam platform).
-   - `totalPairingAktif`: Jumlah klien yang telah dilatih/dipasangkan dengan PT (`klien_profiles.pt_id IS NOT NULL`). Menunjukkan ukuran sebenarnya pengguna yang sedang aktif menikmati relasi interaksi inti aplikasi. (Catatan: Definisi pemakaian kondisi `pt_id IS NOT NULL` ini SENGAJA dirancang selaras mutlak dengan definisi "klien aktif" yang dipakai di metrik fitur PT pada `fitur/pt/PRD-dashboard-pt.md` demi menjamin konsistensi hitungan lintas-role secara sistem).
-   - `totalRequestPending`: Jumlah pengajuan Klien kepada PT yang menggantung alias belum dijawab (di tabel `pairing_requests` dengan status = `'pending'`). Mengisyaratkan peringatan operasional apabila tumpukan request terlalu banyak (berpotensi PT jarang log in/mengabaikan permintaan).
+1. **Pemilihan Metrik Inti (Keputusan Produk Backend)** — **[REVISI 2026-10-10] Hanya User Aktif**: Karena spesifikasi *Frontend* menyerahkan keleluasaan pada implementasi *Backend*, 4 (empat) metrik ini ditetapkan secara solid sebagai keluaran API. Karena kini ada **soft-delete** (`users.is_active`), 3 metrik pertama **hanya menghitung user aktif** (`is_active = true`) agar angka mencerminkan kondisi operasional nyata:
+   - `totalKlien`: Jumlah akun klien **aktif** (`klien_profiles` JOIN `users` WHERE `is_active = true`).
+   - `totalPt`: Jumlah akun PT **aktif** (`pt_profiles` JOIN `users` WHERE `is_active = true`).
+   - `totalPairingAktif`: Jumlah klien aktif yang ter-pasangkan PT (`klien_profiles.pt_id IS NOT NULL` AND klien `is_active = true`). Karena PT nonaktif sudah me-null-kan `pt_id` kliennya saat soft-delete, ini otomatis hanya menghitung pairing dengan PT aktif.
+   - `totalRequestPending`: Jumlah `pairing_requests` status `'pending'` (soft-delete sudah membersihkan pending request, jadi tidak perlu filter tambahan).
 2. **Kondisi Tanpa Data (0 User)**: Apabila *database* masih bersih (Admin baru kali pertama menggunakan sistem dan belum ada satupun entri klien maupun PT), respons sistem tidak boleh memunculkan `null` ataupun menimbulkan _error_. Sistem mutlak mengeluarkan nilai hitung `0` pada semua metrik yang terkait.
 3. **Optimasi Anti-N+1 (Paralelisasi)**: Pengambilan 4 metrik tersebut terdiri dari perhitungan independen. Rutin API dilarang merangkainya secara sekuensial/berantai (menumpuk satu operasi demi operasi) yang dapat menahan jeda koneksi. Eksekusi `COUNT` pada ORM Drizzle wajib dijalankan selaras dan serempak via `Promise.all()`.
 4. **Murni Analitik (Bebas AI)**: Mengingat fungsinya hanyalah perangkum data operasional database belaka, rute ini murni *deterministik* dan tidak perlu dieksekusi dengan campur tangan intervensi kecerdasan buatan (Gemini API) sama sekali.

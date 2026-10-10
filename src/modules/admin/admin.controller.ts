@@ -58,6 +58,15 @@ export const adminController = {
     }
   },
 
+  async getDashboardSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await adminService.getDashboardSummary();
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async listUsers(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = getUsersQuerySchema.parse(req.query);
