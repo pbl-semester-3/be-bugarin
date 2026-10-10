@@ -10,6 +10,12 @@ router.put("/profile", authGuard(["admin"]), adminController.updateProfile);
 router.put("/password", authGuard(["admin"]), adminController.changePassword);
 router.put("/theme", authGuard(["admin"]), adminController.changeTheme);
 
+// Endpoint CRUD User
+router.get("/users", authGuard(["admin"]), adminController.listUsers);
+router.post("/users/pt", authGuard(["admin"]), adminController.createPt);
+router.put("/users/:id", authGuard(["admin"]), adminController.updateUser);
+router.delete("/users/:id", authGuard(["admin"]), adminController.deleteUser);
+
 router.get("/ping", authGuard(["admin"]), (req, res) => {
   res.json({ data: `admin ${req.user?.id} ok` });
 });

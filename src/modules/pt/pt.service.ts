@@ -393,12 +393,11 @@ export const ptService = {
 
     const tujuan = activeCycle.tujuan;
 
-    // TODO: setelah feat/crud-user-admin selesai (kolom is_active ditambahkan ke tabel users),
-    // tambahkan filter AND users.is_active = true di sini untuk exclude PT yang di-soft-delete
-
+    // Exclude PT yang di-soft-delete (users.is_active = false).
     let ptFilters = and(
       eq(ptProfiles.spesialisasi, tujuan),
-      isNotNull(ptProfiles.tempatGym)
+      isNotNull(ptProfiles.tempatGym),
+      eq(users.isActive, true)
     );
 
     if (klienProfile.ptId !== null) {
@@ -408,14 +407,18 @@ export const ptService = {
       );
     }
 
-    const recommendedPts = await db.query.ptProfiles.findMany({
-      where: ptFilters,
-      with: {
-        user: true
-      }
-    });
+    const recommendedPts = await db
+      .select({
+        id: ptProfiles.id,
+        nama: ptProfiles.nama,
+        spesialisasi: ptProfiles.spesialisasi,
+        tempatGym: ptProfiles.tempatGym,
+      })
+      .from(ptProfiles)
+      .innerJoin(users, eq(ptProfiles.userId, users.id))
+      .where(ptFilters);
 
-    return recommendedPts.map(pt => ({
+    return recommendedPts.map((pt) => ({
       id: pt.id,
       nama: pt.nama,
       spesialisasi: pt.spesialisasi,

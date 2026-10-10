@@ -29,6 +29,13 @@
       "when": 1791436740833,
       "tag": "0003_rare_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791635617683,
+      "tag": "0004_long_radioactive_man",
+      "breakpoints": true
     }
   ]
 }
