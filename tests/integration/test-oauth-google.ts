@@ -84,9 +84,10 @@ async function runTests() {
 
     console.log("\n=== TES happy path: klien baru ===");
     const newEmail = `${uniq("googlenew")}@test.com`;
+    const newSub = uniq("gnew");
     {
       googleAuth.verifyIdToken = async (): Promise<GooglePayload> => ({
-        sub: "g-new-sub", email: newEmail, emailVerified: true, name: "Google New",
+        sub: newSub, email: newEmail, emailVerified: true, name: "Google New",
       });
       const res = await post({ idToken: "ok" });
       const body = await res.json();
@@ -96,7 +97,7 @@ async function runTests() {
       const rows = await db.query.users.findMany({ where: eq(users.email, newEmail) });
       check("user dibuat tepat 1", rows.length === 1, rows.length);
       const u = rows[0];
-      check("google_id tersimpan", u.googleId === "g-new-sub", u.googleId);
+      check("google_id tersimpan", u.googleId === newSub, u.googleId);
       check("password_hash bukan plaintext/hex acak di-hash", u.passwordHash.startsWith("$argon2"), u.passwordHash);
 
       const prof = await db.query.klienProfiles.findFirst({ where: eq(klienProfiles.userId, u.id) });
@@ -118,6 +119,7 @@ async function runTests() {
 
     console.log("\n=== TES link akun klien existing (email terdaftar) ===");
     const linkEmail = `${uniq("googlelink")}@test.com`;
+    const linkSub = uniq("glink");
     {
       const reg = await fetch(`${baseUrl}/auth/register`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -126,20 +128,21 @@ async function runTests() {
       check("register klien existing sukses", reg.status === 201, reg.status);
 
       googleAuth.verifyIdToken = async (): Promise<GooglePayload> => ({
-        sub: "g-link-sub", email: linkEmail, emailVerified: true, name: "Link User",
+        sub: linkSub, email: linkEmail, emailVerified: true, name: "Link User",
       });
       const res = await post({ idToken: "ok" });
       console.log(`link raw: [${res.status}] ${await res.text()}`);
       const rows = await db.query.users.findMany({ where: eq(users.email, linkEmail) });
-      check("email existing -> ter-link google_id, tidak duplikat", res.status === 200 && rows.length === 1 && rows[0].googleId === "g-link-sub", rows.map((r) => r.googleId));
+      check("email existing -> ter-link google_id, tidak duplikat", res.status === 200 && rows.length === 1 && rows[0].googleId === linkSub, rows.map((r) => r.googleId));
     }
 
     console.log("\n=== TES email milik PT -> 403 ===");
     const ptEmail = `${uniq("googlept")}@test.com`;
+    const ptSub = uniq("gptsub");
     {
       await db.insert(users).values({ email: ptEmail, username: uniq("gpt"), passwordHash: "hash", role: "pt" });
       googleAuth.verifyIdToken = async (): Promise<GooglePayload> => ({
-        sub: "g-pt-sub", email: ptEmail, emailVerified: true, name: "PT",
+        sub: ptSub, email: ptEmail, emailVerified: true, name: "PT",
       });
       const res = await post({ idToken: "ok" });
       console.log(`email PT raw: [${res.status}] ${await res.text()}`);
@@ -148,10 +151,12 @@ async function runTests() {
 
     console.log("\n=== TES email terhubung google_id lain -> 409 ===");
     const conflictEmail = `${uniq("googleconflict")}@test.com`;
+    const oldSub = uniq("gold");
+    const diffSub = uniq("gdiff");
     {
-      await db.insert(users).values({ email: conflictEmail, username: uniq("gcf"), passwordHash: "hash", role: "klien", googleId: "g-old-sub" });
+      await db.insert(users).values({ email: conflictEmail, username: uniq("gcf"), passwordHash: "hash", role: "klien", googleId: oldSub });
       googleAuth.verifyIdToken = async (): Promise<GooglePayload> => ({
-        sub: "g-different-sub", email: conflictEmail, emailVerified: true, name: "Conflict",
+        sub: diffSub, email: conflictEmail, emailVerified: true, name: "Conflict",
       });
       const res = await post({ idToken: "ok" });
       console.log(`konflik google_id raw: [${res.status}] ${await res.text()}`);
