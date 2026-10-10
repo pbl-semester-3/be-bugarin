@@ -60,6 +60,8 @@ export async function login(input: LoginInput) {
   const valid = await argon2.verify(user.passwordHash, input.password);
   if (!valid) throw new AppError(401, "Email/username atau password salah");
 
+  if (!user.isActive) throw new AppError(403, "Akun tidak aktif");
+
   const token = issueToken({ id: user.id, role: user.role });
   return { token, role: user.role };
 }

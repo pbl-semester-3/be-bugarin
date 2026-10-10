@@ -1,0 +1,255 @@
+/**
+ * CARA MENJALANKAN:
+ * npx tsx tests/integration/test-crud-user-admin.ts
+ *
+ * Verifikasi CRUD user admin + soft-delete + koordinasi (login/authGuard/rekomendasi).
+ * Butuh DB lokal aktif. Seed manual, userId != profileId.
+ */
+import { createApp } from "../../src/app";
+import { db } from "../../src/config/db";
+import {
+  users,
+  adminProfiles,
+  klienProfiles,
+  ptProfiles,
+  progressCycles,
+  pairingRequests,
+} from "../../src/db/schema";
+import { eq, and } from "drizzle-orm";
+import jwt from "jsonwebtoken";
+import { env } from "../../src/config/env";
+import * as argon2 from "argon2";
+
+const PORT = 9982;
+
+let counter = 0;
+function uniq(prefix: string): string {
+  counter += 1;
+  return `${prefix}_${Date.now()}_${counter}`;
+}
+
+let passed = 0;
+let failed = 0;
+function check(name: string, condition: boolean, detail?: unknown) {
+  if (condition) {
+    passed += 1;
+    console.log(`PASS: ${name}`);
+  } else {
+    failed += 1;
+    console.error(`FAIL: ${name}`);
+    if (detail !== undefined) console.error("  detail:", JSON.stringify(detail));
+  }
+}
+
+function sign(userId: number, role: "admin" | "klien" | "pt") {
+  const token = jwt.sign({ sub: userId, role }, env.JWT_SECRET, { expiresIn: "1d" });
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function createAdmin(label: string) {
+  const ins = await db.insert(users).values({
+    email: `${uniq(label)}@test.com`, username: uniq(label), passwordHash: await argon2.hash("password123"), role: "admin",
+  });
+  const userId = ins[0].insertId;
+  await db.insert(adminProfiles).values({ userId, nama: `Admin ${label}` });
+  return { userId, auth: sign(userId, "admin") };
+}
+
+async function createKlien(label: string, opts?: { ptId?: number; withCycle?: boolean }) {
+  const ins = await db.insert(users).values({
+    email: `${uniq(label)}@test.com`, username: uniq(label), passwordHash: await argon2.hash("password123"), role: "klien",
+  });
+  const userId = ins[0].insertId;
+  const profileId = userId + 600_000_000;
+  await db.insert(klienProfiles).values({ id: profileId, userId, nama: `Klien ${label}`, ptId: opts?.ptId ?? null });
+  if (opts?.withCycle) {
+    await db.insert(progressCycles).values({
+      klienId: profileId, bbAwalKg: 80, bbTujuanKg: 70, tujuan: "turun_bb", durasiHari: 30,
+      targetKaloriPerHari: 1800, status: "aktif", tanggalMulai: "2026-09-01",
+    });
+  }
+  return { userId, profileId, auth: sign(userId, "klien") };
+}
+
+async function createPt(label: string, opts?: { tempatGym?: string | null; spesialisasi?: "turun_bb" | "naik_bb" }) {
+  const ins = await db.insert(users).values({
+    email: `${uniq(label)}@test.com`, username: uniq(label), passwordHash: await argon2.hash("password123"), role: "pt",
+  });
+  const userId = ins[0].insertId;
+  const profileId = userId + 500_000_000;
+  await db.insert(ptProfiles).values({
+    id: profileId, userId, nama: `PT ${label}`, spesialisasi: opts?.spesialisasi ?? "turun_bb", tempatGym: opts?.tempatGym ?? "Gym X",
+  });
+  return { userId, profileId, auth: sign(userId, "pt") };
+}
+
+async function runTests() {
+  const app = createApp();
+  const server = app.listen(PORT);
+  const baseUrl = `http://localhost:${PORT}`;
+
+  try {
+    console.log("\n=== SETUP ===");
+    const admin = await createAdmin("crud");
+
+    console.log("\n=== TES GET /admin/users ===");
+    {
+      const noRole = await fetch(`${baseUrl}/admin/users`, { headers: admin.auth });
+      console.log(`tanpa role raw: [${noRole.status}] ${await noRole.text()}`);
+      check("role wajib -> 400", noRole.status === 400, noRole.status);
+
+      const klienA = await createKlien("listA", { withCycle: true });
+      const ptA = await createPt("listA");
+
+      const resK = await fetch(`${baseUrl}/admin/users?role=klien`, { headers: admin.auth });
+      const bK = await resK.json();
+      const itemK = bK.data.find((x: any) => x.id === klienA.userId);
+      console.log(`role=klien raw: [${resK.status}] total=${bK.data.length}`);
+      check("klien: klienProfile terisi, ptProfile null", itemK && itemK.klienProfile !== null && itemK.ptProfile === null, itemK);
+      check("klien: tujuan dari siklus aktif", itemK?.klienProfile?.tujuan === "turun_bb", itemK?.klienProfile);
+      check("klien: isActive true", itemK?.isActive === true, itemK);
+
+      const resP = await fetch(`${baseUrl}/admin/users?role=pt`, { headers: admin.auth });
+      const bP = await resP.json();
+      const itemP = bP.data.find((x: any) => x.id === ptA.userId);
+      console.log(`role=pt raw: [${resP.status}] total=${bP.data.length}`);
+      check("pt: ptProfile terisi, klienProfile null", itemP && itemP.ptProfile !== null && itemP.klienProfile === null, itemP);
+    }
+
+    console.log("\n=== TES POST /admin/users/pt ===");
+    let createdPtUserId = 0;
+    {
+      const email = `${uniq("newpt")}@test.com`;
+      const res = await fetch(`${baseUrl}/admin/users/pt`, {
+        method: "POST", headers: admin.auth,
+        body: JSON.stringify({ nama: "PT Baru", email, username: uniq("newptuser"), password: "password123" }),
+      });
+      const body = await res.json();
+      console.log(`create pt raw: [${res.status}] ${JSON.stringify(body)}`);
+      check("create PT -> 201 + ptProfile", res.status === 201 && body.data.role === "pt" && body.data.ptProfile.nama === "PT Baru", body);
+      createdPtUserId = body.data.id;
+
+      const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, createdPtUserId) });
+      check("pt_profiles dibuat", p?.nama === "PT Baru", p?.nama);
+
+      const login = await fetch(`${baseUrl}/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrUsername: email, password: "password123" }),
+      });
+      check("password yang diketik admin bisa login", login.status === 200, login.status);
+
+      const dup = await fetch(`${baseUrl}/admin/users/pt`, {
+        method: "POST", headers: admin.auth,
+        body: JSON.stringify({ nama: "PT Dup", email, username: uniq("dupuser"), password: "password123" }),
+      });
+      console.log(`create duplikat raw: [${dup.status}] ${await dup.text()}`);
+      check("email duplikat -> 409", dup.status === 409, dup.status);
+    }
+
+    console.log("\n=== TES PUT /admin/users/:id ===");
+    {
+      const k = await createKlien("editA");
+      const newEmail = `${uniq("edit")}@test.com`;
+      const newUsername = uniq("edituser");
+      const res = await fetch(`${baseUrl}/admin/users/${k.userId}`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({ nama: "Nama Diubah", email: newEmail, username: newUsername, password: "passwordBaru1" }),
+      });
+      const body = await res.json();
+      console.log(`edit klien raw: [${res.status}] ${JSON.stringify(body)}`);
+      check("edit -> 200 + nama & email/username berubah", res.status === 200 && body.data.klienProfile.nama === "Nama Diubah" && body.data.email === newEmail && body.data.username === newUsername, body);
+
+      const u = await db.query.users.findFirst({ where: eq(users.id, k.userId) });
+      check("password baru ter-hash & valid", await argon2.verify(u!.passwordHash, "passwordBaru1"), u!.passwordHash);
+
+      const dup = await fetch(`${baseUrl}/admin/users/${k.userId}`, {
+        method: "PUT", headers: admin.auth, body: JSON.stringify({ email: newEmail, username: newUsername }),
+      });
+      check("edit tidak konflik dgn dirinya sendiri -> 200", dup.status === 200, dup.status);
+
+      const targetAdmin = await fetch(`${baseUrl}/admin/users/${admin.userId}`, {
+        method: "PUT", headers: admin.auth, body: JSON.stringify({ nama: "X" }),
+      });
+      console.log(`edit target admin raw: [${targetAdmin.status}] ${await targetAdmin.text()}`);
+      check("target admin -> 404", targetAdmin.status === 404, targetAdmin.status);
+    }
+
+    console.log("\n=== TES DELETE PT (soft) + koordinasi ===");
+    {
+      const pt = await createPt("delpt");
+      const klienOfPt = await createKlien("delptklien", { ptId: pt.profileId });
+      await db.insert(pairingRequests).values({ klienId: klienOfPt.profileId, ptId: pt.profileId, status: "pending" });
+
+      // token lama PT (dipakai untuk uji authGuard setelah nonaktif)
+      const oldPtAuth = pt.auth;
+
+      const res = await fetch(`${baseUrl}/admin/users/${pt.userId}`, { method: "DELETE", headers: admin.auth });
+      const body = await res.json();
+      console.log(`delete pt raw: [${res.status}] ${JSON.stringify(body)}`);
+      check("delete PT -> isActive false", res.status === 200 && body.data.isActive === false, body);
+
+      const u = await db.query.users.findFirst({ where: eq(users.id, pt.userId) });
+      check("DB PT is_active false", u!.isActive === false, u!.isActive);
+
+      const kAfter = await db.query.klienProfiles.findFirst({ where: eq(klienProfiles.id, klienOfPt.profileId) });
+      check("klien PT dilepas (pt_id null)", kAfter!.ptId === null, kAfter!.ptId);
+
+      const pending = await db.query.pairingRequests.findFirst({ where: and(eq(pairingRequests.ptId, pt.profileId), eq(pairingRequests.status, "pending")) });
+      check("pending pairing PT dihapus", pending === undefined, pending);
+
+      // login nonaktif -> 403
+      const login = await fetch(`${baseUrl}/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrUsername: u!.email, password: "password123" }),
+      });
+      console.log(`login nonaktif raw: [${login.status}] ${await login.text()}`);
+      check("login PT nonaktif -> 403", login.status === 403, login.status);
+
+      // token lama ditolak authGuard (opsi b)
+      const oldToken = await fetch(`${baseUrl}/pt/profile`, { headers: oldPtAuth });
+      console.log(`token lama nonaktif raw: [${oldToken.status}] ${await oldToken.text()}`);
+      check("token lama user nonaktif -> 403", oldToken.status === 403, oldToken.status);
+    }
+
+    console.log("\n=== TES DELETE klien (soft, data tetap) ===");
+    {
+      const k = await createKlien("delklien", { withCycle: true });
+      const res = await fetch(`${baseUrl}/admin/users/${k.userId}`, { method: "DELETE", headers: admin.auth });
+      const body = await res.json();
+      console.log(`delete klien raw: [${res.status}] ${JSON.stringify(body)}`);
+      check("delete klien -> isActive false", res.status === 200 && body.data.isActive === false, body);
+
+      const u = await db.query.users.findFirst({ where: eq(users.id, k.userId) });
+      check("DB klien is_active false", u!.isActive === false, u!.isActive);
+
+      const cycles = await db.query.progressCycles.findMany({ where: eq(progressCycles.klienId, k.profileId) });
+      check("data progres klien TETAP ada (soft-delete)", cycles.length === 1, cycles.length);
+    }
+
+    console.log("\n=== TES rekomendasi exclude PT nonaktif ===");
+    {
+      const klien = await createKlien("rekom", { withCycle: true });
+      const ptActive = await createPt("rekomaktif", { tempatGym: "Gym Aktif" });
+      const ptInactive = await createPt("rekommati", { tempatGym: "Gym Mati" });
+      await fetch(`${baseUrl}/admin/users/${ptInactive.userId}`, { method: "DELETE", headers: admin.auth });
+
+      const res = await fetch(`${baseUrl}/pt/recommendations`, { headers: klien.auth });
+      const body = await res.json();
+      const ids = body.data.map((p: any) => p.id);
+      console.log(`rekomendasi raw: [${res.status}] total=${ids.length}`);
+      check("PT aktif muncul", ids.includes(ptActive.profileId), ids);
+      check("PT nonaktif TIDAK muncul", !ids.includes(ptInactive.profileId), ids);
+    }
+
+    console.log(`\n=== KESIMPULAN: Lulus ${passed}, Gagal ${failed} ===`);
+    if (failed > 0) process.exitCode = 1;
+  } catch (error) {
+    console.error("Fatal Test error:", error);
+    process.exitCode = 1;
+  } finally {
+    server.close();
+    await db.$client.end();
+  }
+}
+
+runTests();

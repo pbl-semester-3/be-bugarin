@@ -20,3 +20,28 @@ export const changeAdminThemeSchema = z.object({
 export type UpdateAdminProfileInput = z.infer<typeof updateAdminProfileSchema>;
 export type ChangeAdminPasswordInput = z.infer<typeof changeAdminPasswordSchema>;
 export type ChangeAdminThemeInput = z.infer<typeof changeAdminThemeSchema>;
+
+// ==== CRUD User ====
+export const getUsersQuerySchema = z.object({
+  role: z.enum(["klien", "pt"], { message: "role wajib diisi (klien/pt)" }),
+});
+
+// Admin mengetik password manual saat membuat akun PT.
+export const createPtSchema = z.object({
+  nama: z.string().min(1, "Nama tidak boleh kosong"),
+  email: z.string().email("Format email tidak valid"),
+  username: z.string().min(3, "Username minimal 3 karakter").max(50),
+  password: z.string().min(8, "Password minimal 8 karakter"),
+});
+
+// password? = password baru (opsional); hanya klien/PT yang boleh jadi target.
+export const updateUserSchema = z.object({
+  nama: z.string().min(1, "Nama tidak boleh kosong").optional(),
+  email: z.string().email("Format email tidak valid").optional(),
+  username: z.string().min(3, "Username minimal 3 karakter").max(50).optional(),
+  password: z.string().min(8, "Password minimal 8 karakter").optional(),
+}).strict();
+
+export type GetUsersQueryInput = z.infer<typeof getUsersQuerySchema>;
+export type CreatePtInput = z.infer<typeof createPtSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
