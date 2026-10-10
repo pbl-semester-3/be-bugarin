@@ -1,4 +1,4 @@
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql, isNotNull } from "drizzle-orm";
 import { db } from "../../config/db";
 import {
   users,
@@ -312,5 +312,36 @@ export const adminService = {
     });
 
     return { id: targetId, isActive: false };
+  },
+
+  async getDashboardSummary() {
+    const [klienRows, ptRows, pairingRows, pendingRows] = await Promise.all([
+      db
+        .select({ total: sql<string>`COUNT(*)` })
+        .from(klienProfiles)
+        .innerJoin(users, eq(klienProfiles.userId, users.id))
+        .where(eq(users.isActive, true)),
+      db
+        .select({ total: sql<string>`COUNT(*)` })
+        .from(ptProfiles)
+        .innerJoin(users, eq(ptProfiles.userId, users.id))
+        .where(eq(users.isActive, true)),
+      db
+        .select({ total: sql<string>`COUNT(*)` })
+        .from(klienProfiles)
+        .innerJoin(users, eq(klienProfiles.userId, users.id))
+        .where(and(eq(users.isActive, true), isNotNull(klienProfiles.ptId))),
+      db
+        .select({ total: sql<string>`COUNT(*)` })
+        .from(pairingRequests)
+        .where(eq(pairingRequests.status, "pending")),
+    ]);
+
+    return {
+      totalKlien: Number(klienRows[0]?.total ?? 0),
+      totalPt: Number(ptRows[0]?.total ?? 0),
+      totalPairingAktif: Number(pairingRows[0]?.total ?? 0),
+      totalRequestPending: Number(pendingRows[0]?.total ?? 0),
+    };
   },
 };
