@@ -5,6 +5,9 @@
 import { db } from "../src/config/db";
 import { masterOlahraga } from "../src/db/schema/master-olahraga";
 import { masterMakanan } from "../src/db/schema/master-makanan";
+import { users, adminProfiles } from "../src/db/schema";
+import { eq, or } from "drizzle-orm";
+import * as argon2 from "argon2";
 
 // Nilai MET (Metabolic Equivalent of Task) berikut adalah estimasi umum dari referensi
 // kesehatan publik yang dikenal luas — cocok untuk kalkulasi kalori perkiraan di MVP
@@ -30,6 +33,45 @@ const makananSeed = [
   { nama: "Tahu", kaloriPer100g: 120, kategori: "protein" as const },
 ];
 
+// Seed akun Admin awal (env-gated & idempotent). Admin tidak bisa self-register,
+// jadi akun ini dibuat di sini agar web Admin bisa login lalu membuat akun PT.
+// Catatan: TIDAK menimpa password admin yang sudah ada (skip if exists).
+async function seedAdmin() {
+  const email = process.env.ADMIN_EMAIL;
+  const username = process.env.ADMIN_USERNAME;
+  const password = process.env.ADMIN_PASSWORD;
+  const nama = process.env.ADMIN_NAMA || "Super Admin";
+
+  if (!email || !username || !password) {
+    console.log(
+      "Seed admin dilewati: set ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD di .env kalau ingin membuat akun admin awal.",
+    );
+    return;
+  }
+
+  const existing = await db.query.users.findFirst({
+    where: or(eq(users.email, email), eq(users.username, username)),
+  });
+  if (existing) {
+    console.log(`Seed admin dilewati: user '${existing.email}' sudah ada (password tidak diubah).`);
+    return;
+  }
+
+  const passwordHash = await argon2.hash(password);
+  await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(users).values({
+      email,
+      username,
+      passwordHash,
+      role: "admin",
+      isActive: true,
+    });
+    await tx.insert(adminProfiles).values({ userId: inserted.insertId, nama });
+  });
+
+  console.log(`Seed admin dibuat: ${email} (username: ${username}).`);
+}
+
 async function seed() {
   console.log("Seeding master_olahraga...");
   for (const item of olahragaSeed) {
@@ -43,6 +85,9 @@ async function seed() {
       .values({ ...item, sumber: "seed" })
       .onDuplicateKeyUpdate({ set: { kaloriPer100g: item.kaloriPer100g, kategori: item.kategori } });
   }
+
+  console.log("Seeding akun admin...");
+  await seedAdmin();
 
   console.log(`Selesai: ${olahragaSeed.length} olahraga, ${makananSeed.length} makanan.`);
   process.exit(0);
