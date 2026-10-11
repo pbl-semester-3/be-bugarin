@@ -1,4 +1,5 @@
-import { eq, and, asc, sql, isNotNull } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNotNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { db } from "../../config/db";
 import {
   users,
@@ -8,6 +9,7 @@ import {
   progressCycles,
   pairingRequests,
   adminActivityLogs,
+  feedbacks,
 } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import * as argon2 from "argon2";
@@ -17,6 +19,7 @@ import type {
   ChangeAdminThemeInput,
   CreatePtInput,
   UpdateUserInput,
+  GetRiwayatQueryInput,
 } from "./admin.schema";
 
 function asDuplicateError(error: unknown): unknown {
@@ -342,6 +345,79 @@ export const adminService = {
       totalPt: Number(ptRows[0]?.total ?? 0),
       totalPairingAktif: Number(pairingRows[0]?.total ?? 0),
       totalRequestPending: Number(pendingRows[0]?.total ?? 0),
+    };
+  },
+
+  async getRiwayat(query: GetRiwayatQueryInput) {
+    const { page, limit } = query;
+    const offset = (page - 1) * limit;
+
+    const adminUser = alias(users, "admin_user");
+    const targetUser = alias(users, "target_user");
+
+    const [feedbackRows, adminLogRows, feedbackCountRows, adminLogCountRows] = await Promise.all([
+      db
+        .select({
+          id: feedbacks.id,
+          namaPt: ptProfiles.nama,
+          namaKlien: klienProfiles.nama,
+          pesan: feedbacks.pesan,
+          createdAt: feedbacks.createdAt,
+        })
+        .from(feedbacks)
+        .innerJoin(ptProfiles, eq(feedbacks.ptId, ptProfiles.id))
+        .innerJoin(klienProfiles, eq(feedbacks.klienId, klienProfiles.id))
+        .where(eq(feedbacks.source, "pt"))
+        .orderBy(desc(feedbacks.createdAt))
+        .limit(limit)
+        .offset(offset),
+
+      db
+        .select({
+          id: adminActivityLogs.id,
+          namaAdmin: adminProfiles.nama,
+          namaTargetUser: sql<string | null>`COALESCE(${klienProfiles.nama}, ${ptProfiles.nama})`,
+          aksi: adminActivityLogs.aksi,
+          createdAt: adminActivityLogs.createdAt,
+        })
+        .from(adminActivityLogs)
+        .innerJoin(adminUser, eq(adminActivityLogs.adminId, adminUser.id))
+        .innerJoin(adminProfiles, eq(adminProfiles.userId, adminUser.id))
+        .leftJoin(targetUser, eq(adminActivityLogs.targetUserId, targetUser.id))
+        .leftJoin(klienProfiles, eq(klienProfiles.userId, targetUser.id))
+        .leftJoin(ptProfiles, eq(ptProfiles.userId, targetUser.id))
+        .orderBy(desc(adminActivityLogs.createdAt))
+        .limit(limit)
+        .offset(offset),
+
+      db.select({ total: sql<string>`COUNT(*)` }).from(feedbacks).where(eq(feedbacks.source, "pt")),
+      db.select({ total: sql<string>`COUNT(*)` }).from(adminActivityLogs),
+    ]);
+
+    const feedbackTotal = Number(feedbackCountRows[0]?.total ?? 0);
+    const adminLogTotal = Number(adminLogCountRows[0]?.total ?? 0);
+
+    return {
+      data: {
+        feedbackLogs: feedbackRows.map((r) => ({
+          id: r.id,
+          namaPt: r.namaPt,
+          namaKlien: r.namaKlien,
+          pesan: r.pesan,
+          createdAt: r.createdAt,
+        })),
+        adminActivityLogs: adminLogRows.map((r) => ({
+          id: r.id,
+          namaAdmin: r.namaAdmin,
+          namaTargetUser: r.namaTargetUser ?? null,
+          aksi: r.aksi,
+          createdAt: r.createdAt,
+        })),
+      },
+      meta: {
+        feedbackLogs: { total: feedbackTotal, page, hasMore: page * limit < feedbackTotal },
+        adminActivityLogs: { total: adminLogTotal, page, hasMore: page * limit < adminLogTotal },
+      },
     };
   },
 };

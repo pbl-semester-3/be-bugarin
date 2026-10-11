@@ -13,6 +13,9 @@ router.put("/theme", authGuard(["admin"]), adminController.changeTheme);
 // Endpoint Dashboard Admin
 router.get("/dashboard-summary", authGuard(["admin"]), adminController.getDashboardSummary);
 
+// Endpoint Riwayat Admin
+router.get("/riwayat", authGuard(["admin"]), adminController.getRiwayat);
+
 // Endpoint CRUD User
 router.get("/users", authGuard(["admin"]), adminController.listUsers);
 router.post("/users/pt", authGuard(["admin"]), adminController.createPt);

@@ -8,6 +8,7 @@ import {
   getUsersQuerySchema,
   createPtSchema,
   updateUserSchema,
+  getRiwayatQuerySchema,
 } from "./admin.schema";
 
 export const adminController = {
@@ -62,6 +63,16 @@ export const adminController = {
     try {
       const data = await adminService.getDashboardSummary();
       res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getRiwayat(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = getRiwayatQuerySchema.parse(req.query);
+      const response = await adminService.getRiwayat(parsed);
+      res.json(response);
     } catch (error) {
       next(error);
     }

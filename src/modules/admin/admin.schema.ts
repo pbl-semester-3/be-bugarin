@@ -45,3 +45,9 @@ export const updateUserSchema = z.object({
 export type GetUsersQueryInput = z.infer<typeof getUsersQuerySchema>;
 export type CreatePtInput = z.infer<typeof createPtSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+export const getRiwayatQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100, "Limit maksimal 100").default(50),
+});
+export type GetRiwayatQueryInput = z.infer<typeof getRiwayatQuerySchema>;
