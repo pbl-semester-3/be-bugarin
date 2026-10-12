@@ -12,6 +12,8 @@ export const ptProfiles = mysqlTable("pt_profiles", {
   jenisKelamin: mysqlEnum("jenis_kelamin", ["pria", "wanita"]),
   spesialisasi: mysqlEnum("spesialisasi", ["turun_bb", "naik_bb"]),
   tempatGym: varchar("tempat_gym", { length: 150 }),
+  // public_id Cloudinary (bukan URL absolut). URL dibangun saat response. Nullable = belum ada foto.
+  fotoPublicId: varchar("foto_public_id", { length: 255 }),
 });
 
 export const ptProfilesRelations = relations(ptProfiles, ({ one }) => ({

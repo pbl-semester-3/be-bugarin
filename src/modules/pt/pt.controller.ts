@@ -156,6 +156,31 @@ export const ptController = {
     }
   },
 
+  async uploadProfilePhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      if (!req.file) {
+        return res.status(400).json({ error: "File foto wajib dikirim (field 'foto')" });
+      }
+      const data = await ptService.uploadProfilePhoto(userId, req.file);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteProfilePhoto(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const data = await ptService.deleteProfilePhoto(userId);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getDashboardSummary(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

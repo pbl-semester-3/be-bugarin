@@ -11,4 +11,11 @@ export function isCloudinaryConfigured(): boolean {
   return Boolean(env.CLOUDINARY_URL);
 }
 
+// URL foto dibangun saat response dari public_id Cloudinary (DB tidak menyimpan URL absolut).
+// Dipakai bersama oleh semua role (klien, PT).
+export function buildCloudinaryUrl(publicId: string | null): string | null {
+  if (!publicId) return null;
+  return cloudinary.url(publicId, { secure: true });
+}
+
 export { cloudinary };

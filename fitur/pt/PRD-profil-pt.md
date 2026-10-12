@@ -72,12 +72,26 @@ Fitur pengelolaan profil bagi Personal Trainer (PT). Akun PT dibuat oleh Admin t
       "usia": 30,
       "jenisKelamin": "pria",
       "spesialisasi": "turun_bb",
-      "tempatGym": "Fithub Setiabudi"
+      "tempatGym": "Fithub Setiabudi",
+      "fotoUrl": null
     }
   }
 }
 ```
 *(Catatan: Jika boolean `profileComplete` diputuskan wajib ada, properti tersebut akan disisipkan ke dalam objek `data` ini)*.
+
+## Foto Profil PT (Cloudinary) — [revisi 2026-10-12]
+
+Mengikuti pola foto profil klien (endpoint & middleware yang sama).
+
+| Method & Path | Auth | Fungsi |
+|---|---|---|
+| `POST /pt/profile/photo` | PT | Upload (multipart field `foto`) → `{ data: { fotoUrl } }` |
+| `DELETE /pt/profile/photo` | PT | Hapus foto sendiri → `{ data: { fotoUrl: null } }`; 404 bila belum ada |
+
+- Batas **2 MB**, format `image/jpeg|png|webp`.
+- DB menyimpan `pt_profiles.foto_public_id` (identifier Cloudinary, bukan URL absolut); `fotoUrl` dibangun saat response (`profile.fotoUrl`) via SDK, folder `CLOUDINARY_FOLDER` yang sama dengan klien.
+- Upload ulang menimpa (`destroy` public_id lama). `CLOUDINARY_URL` kosong → upload `503`.
 
 ## Validasi (Zod) & Autorisasi
 
