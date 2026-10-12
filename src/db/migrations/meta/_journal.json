@@ -36,6 +36,13 @@
       "when": 1791635617683,
       "tag": "0004_long_radioactive_man",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1791818077484,
+      "tag": "0005_legal_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

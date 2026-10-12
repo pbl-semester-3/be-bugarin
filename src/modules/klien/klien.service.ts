@@ -2,7 +2,7 @@ import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { db } from "../../config/db";
 import { klienProfiles, progressCycles, weightLogs, users, weeklyPlans, activityLogs, masterOlahraga, mealLogs, masterMakanan, ptProfiles, pairingRequests, feedbacks, type WorkoutPlanItem } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
-import { cloudinary, isCloudinaryConfigured } from "../../config/cloudinary";
+import { cloudinary, isCloudinaryConfigured, buildCloudinaryUrl } from "../../config/cloudinary";
 import { env } from "../../config/env";
 import * as argon2 from "argon2";
 import { calculateTargetKalori } from "../../utils/kalori";
@@ -18,12 +18,6 @@ import type {
   CreateActivityLogInput,
   CreateMealLogInput
 } from "./klien.schema";
-
-// URL foto dibangun saat response dari public_id Cloudinary (DB tidak menyimpan URL absolut).
-function buildFotoUrl(publicId: string | null): string | null {
-  if (!publicId) return null;
-  return cloudinary.url(publicId, { secure: true });
-}
 
 export type DashboardSummary = {
   pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null } | null;
@@ -151,7 +145,7 @@ export const klienService = {
       profileComplete: isProfileComplete,
       activeCycle: activeCycle ?? null,
       bbSekarangKg: lastWeight?.beratBadanKg ?? null,
-      fotoUrl: buildFotoUrl(profile.fotoPublicId),
+      fotoUrl: buildCloudinaryUrl(profile.fotoPublicId),
       createdAt: profile.user.createdAt,
     };
   },
@@ -189,7 +183,7 @@ export const klienService = {
       await cloudinary.uploader.destroy(oldPublicId).catch(() => undefined);
     }
 
-    return { fotoUrl: buildFotoUrl(result.public_id) };
+    return { fotoUrl: buildCloudinaryUrl(result.public_id) };
   },
 
   async deleteProfilePhoto(userId: number) {

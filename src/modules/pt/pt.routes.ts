@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authGuard } from "../../middlewares/auth-guard";
+import { uploadSinglePhoto } from "../../middlewares/upload";
 import { ptController } from "./pt.controller";
 
 const router = Router();
@@ -7,6 +8,8 @@ const router = Router();
 // Endpoint Profil PT
 router.get("/profile", authGuard(["pt"]), ptController.getProfile);
 router.put("/profile", authGuard(["pt"]), ptController.updateProfile);
+router.post("/profile/photo", authGuard(["pt"]), uploadSinglePhoto(), ptController.uploadProfilePhoto);
+router.delete("/profile/photo", authGuard(["pt"]), ptController.deleteProfilePhoto);
 router.put("/password", authGuard(["pt"]), ptController.changePassword);
 router.put("/theme", authGuard(["pt"]), ptController.changeTheme);
 
