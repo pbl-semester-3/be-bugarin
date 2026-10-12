@@ -118,7 +118,11 @@ async function runTests() {
       const ids = body.data.map((k: any) => k.id);
       check("list hanya klien PT1 (A & C)", res.status === 200 && ids.includes(klienA.profileId) && ids.includes(klienC.profileId) && !ids.includes(klienB.profileId), body);
       check("list meta.total = 2", body.meta?.total === 2, body);
-      check("list field hanya id & nama", Object.keys(body.data[0]).sort().join(",") === "id,nama", body.data[0]);
+      check("list field id/nama/tujuan/durasiHari", Object.keys(body.data[0]).sort().join(",") === "durasiHari,id,nama,tujuan", body.data[0]);
+      const itemA = body.data.find((k: any) => k.id === klienA.profileId);
+      const itemC = body.data.find((k: any) => k.id === klienC.profileId);
+      check("list tujuan+durasiHari dari siklus aktif (A)", itemA?.tujuan === "turun_bb" && itemA?.durasiHari === 30, itemA);
+      check("list tanpa siklus -> null (C)", itemC?.tujuan === null && itemC?.durasiHari === null, itemC);
       check("list urut nama ASC (A sebelum C)", ids.indexOf(klienA.profileId) < ids.indexOf(klienC.profileId), ids);
     }
 
@@ -127,7 +131,7 @@ async function runTests() {
       const res = await fetch(`${baseUrl}/pt/klien/${klienA.profileId}`, { headers: pt1.auth });
       const body = await res.json();
       console.log(`detail A raw: [${res.status}] ${JSON.stringify(body)}`);
-      check("detail A profil + bb dari cycle", res.status === 200 && body.data.profil.bbAwalKg === 80 && body.data.profil.bbTujuanKg === 70 && body.data.profil.tujuan === "turun_bb", body);
+      check("detail A profil + bb dari cycle", res.status === 200 && body.data.profil.bbAwalKg === 80 && body.data.profil.bbTujuanKg === 70 && body.data.profil.tujuan === "turun_bb" && body.data.profil.durasiHari === 30, body);
       check("detail A ada jenisKelamin (null krn belum diisi)", "jenisKelamin" in body.data.profil && body.data.profil.jenisKelamin === null, body);
       check("detail A grafikBb urut ASC", body.data.grafikBb.length === 3 && body.data.grafikBb[0].beratKg === 79 && body.data.grafikBb[2].beratKg === 78, body.data.grafikBb);
     }

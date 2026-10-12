@@ -127,11 +127,26 @@ export const ptService = {
     const rows = await db.query.klienProfiles.findMany({
       where: eq(klienProfiles.ptId, ptProfileId),
       columns: { id: true, nama: true },
+      with: {
+        progressCycles: {
+          where: eq(progressCycles.status, "aktif"),
+          orderBy: [desc(progressCycles.tanggalMulai)],
+          limit: 1,
+        },
+      },
       orderBy: [asc(klienProfiles.nama)],
     });
 
     return {
-      data: rows.map((k) => ({ id: k.id, nama: k.nama })),
+      data: rows.map((k) => {
+        const cycle = k.progressCycles[0];
+        return {
+          id: k.id,
+          nama: k.nama,
+          tujuan: cycle ? cycle.tujuan : null,
+          durasiHari: cycle ? cycle.durasiHari : null,
+        };
+      }),
       meta: { total: rows.length },
     };
   },
@@ -159,6 +174,7 @@ export const ptService = {
         bbAwalKg: activeCycle ? activeCycle.bbAwalKg : null,
         bbTujuanKg: activeCycle ? activeCycle.bbTujuanKg : null,
         tujuan: activeCycle ? activeCycle.tujuan : null,
+        durasiHari: activeCycle ? activeCycle.durasiHari : null,
       },
       grafikBb: logs.map((l) => ({ tanggal: l.tanggal, beratKg: l.beratBadanKg })),
     };
