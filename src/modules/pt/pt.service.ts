@@ -348,22 +348,33 @@ export const ptService = {
 
     const klienIds = klienList.map((k) => k.id);
 
-    // Anti-N+1: batch query, ambil baris pertama per klien di memori (bukan query per klien).
-    const cycleRows = await db.select({
-      klienId: progressCycles.klienId,
-      bbAwalKg: progressCycles.bbAwalKg,
-    })
-      .from(progressCycles)
-      .where(inArray(progressCycles.klienId, klienIds))
-      .orderBy(asc(progressCycles.tanggalMulai), asc(progressCycles.id));
+    // Anti-N+1: batch query paralel, ambil baris pertama per klien di memori (bukan query per klien).
+    const [cycleRows, weightRows, activeCycleRows] = await Promise.all([
+      db.select({
+        klienId: progressCycles.klienId,
+        bbAwalKg: progressCycles.bbAwalKg,
+      })
+        .from(progressCycles)
+        .where(inArray(progressCycles.klienId, klienIds))
+        .orderBy(asc(progressCycles.tanggalMulai), asc(progressCycles.id)),
 
-    const weightRows = await db.select({
-      klienId: weightLogs.klienId,
-      beratBadanKg: weightLogs.beratBadanKg,
-    })
-      .from(weightLogs)
-      .where(inArray(weightLogs.klienId, klienIds))
-      .orderBy(desc(weightLogs.tanggal), desc(weightLogs.id));
+      db.select({
+        klienId: weightLogs.klienId,
+        beratBadanKg: weightLogs.beratBadanKg,
+      })
+        .from(weightLogs)
+        .where(inArray(weightLogs.klienId, klienIds))
+        .orderBy(desc(weightLogs.tanggal), desc(weightLogs.id)),
+
+      db.select({
+        klienId: progressCycles.klienId,
+        tujuan: progressCycles.tujuan,
+        durasiHari: progressCycles.durasiHari,
+      })
+        .from(progressCycles)
+        .where(and(inArray(progressCycles.klienId, klienIds), eq(progressCycles.status, "aktif")))
+        .orderBy(desc(progressCycles.tanggalMulai), desc(progressCycles.id)),
+    ]);
 
     const bbAwalByKlien = new Map<number, number>();
     for (const row of cycleRows) {
@@ -375,14 +386,26 @@ export const ptService = {
       if (!bbSekarangByKlien.has(row.klienId)) bbSekarangByKlien.set(row.klienId, row.beratBadanKg);
     }
 
-    const data = klienList.map((k) => ({
-      id: k.id,
-      nama: k.nama,
-      usia: k.usia,
-      jenisKelamin: k.jenisKelamin,
-      bbAwalKg: bbAwalByKlien.get(k.id) ?? null,
-      bbSekarangKg: bbSekarangByKlien.get(k.id) ?? null,
-    }));
+    const activeCycleByKlien = new Map<number, { tujuan: "turun_bb" | "naik_bb"; durasiHari: number }>();
+    for (const row of activeCycleRows) {
+      if (!activeCycleByKlien.has(row.klienId)) {
+        activeCycleByKlien.set(row.klienId, { tujuan: row.tujuan, durasiHari: row.durasiHari });
+      }
+    }
+
+    const data = klienList.map((k) => {
+      const active = activeCycleByKlien.get(k.id);
+      return {
+        id: k.id,
+        nama: k.nama,
+        usia: k.usia,
+        jenisKelamin: k.jenisKelamin,
+        bbAwalKg: bbAwalByKlien.get(k.id) ?? null,
+        bbSekarangKg: bbSekarangByKlien.get(k.id) ?? null,
+        tujuan: active ? active.tujuan : null,
+        durasiHari: active ? active.durasiHari : null,
+      };
+    });
 
     return { data, meta: { total: data.length } };
   },

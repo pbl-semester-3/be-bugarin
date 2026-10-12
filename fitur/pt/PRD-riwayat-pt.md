@@ -88,6 +88,8 @@ type RiwayatKlienItem = {
   jenisKelamin: "pria" | "wanita" | null;
   bbAwalKg: number | null;
   bbSekarangKg: number | null;
+  tujuan: "turun_bb" | "naik_bb" | null; // dari siklus AKTIF; null bila tidak ada
+  durasiHari: number | null;             // dari siklus AKTIF; null bila tidak ada
 }
 ```
 

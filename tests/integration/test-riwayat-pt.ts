@@ -138,15 +138,19 @@ async function runTests() {
       const a = body.data.find((k: any) => k.id === A.profileId);
       check("A: bbAwal 90 (siklus tertua) & bbSekarang 74 (log terakhir)", a.bbAwalKg === 90 && a.bbSekarangKg === 74, a);
       check("A: usia & jenisKelamin terisi", a.usia === 30 && a.jenisKelamin === "pria", a);
+      check("A: tujuan+durasiHari dari siklus aktif", a.tujuan === "turun_bb" && a.durasiHari === 30, a);
 
       const b = body.data.find((k: any) => k.id === B.profileId);
       check("B: tanpa cycle & log -> null", b.bbAwalKg === null && b.bbSekarangKg === null && b.usia === null && b.jenisKelamin === null, b);
+      check("B: tanpa siklus aktif -> tujuan/durasiHari null", b.tujuan === null && b.durasiHari === null, b);
 
       const c = body.data.find((k: any) => k.id === C.profileId);
       check("C: cycle saja -> bbAwal 85, bbSekarang null", c.bbAwalKg === 85 && c.bbSekarangKg === null, c);
+      check("C: tujuan+durasiHari dari siklus aktif", c.tujuan === "turun_bb" && c.durasiHari === 30, c);
 
       const e = body.data.find((k: any) => k.id === E.profileId);
       check("E: tiebreak cycle id ASC (100) & weight id DESC (69)", e.bbAwalKg === 100 && e.bbSekarangKg === 69, e);
+      check("E: tujuan+durasiHari dari siklus aktif", e.tujuan === "turun_bb" && e.durasiHari === 30, e);
 
       check("D (PT2) tidak muncul", !body.data.some((k: any) => k.id === D.profileId), body.data);
     }
