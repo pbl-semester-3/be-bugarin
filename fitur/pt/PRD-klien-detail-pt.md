@@ -46,7 +46,7 @@ Fitur ini menyediakan kemampuan fungsional bagi PT untuk mengelola secara indivi
 2. **List Klien (GET /pt/klien)**
    - Menampilkan SEMUA klien dengan `pt_id = req.user.id`. Konsisten penuh dengan definisi "Klien Aktif" pada *Dashboard PT*. 
    - Klien yang baru *pairing* dan belum punya *progress_cycles* atau *weight_logs* tetap wajib ditampilkan.
-   - **Spesifikasi Field**: Berbeda dengan endpoint `GET /pt/riwayat` yang berfungsi sebagai laporan *read-only* lengkap (menampilkan usia, gender, BB awal-sekarang), endpoint `GET /pt/klien` ini bertujuan spesifik untuk navigasi cepat (via list) menuju halaman Detail Klien. Oleh karena itu, field yang dikembalikan (pada tipe `KlienItem`) dibuat seminimal mungkin (hanya `id` dan `nama`) demi efisiensi *payload* dan agar tidak tumpang tindih secara tujuan dengan fitur riwayat.
+   - **Spesifikasi Field**: Berbeda dengan endpoint `GET /pt/riwayat` yang berfungsi sebagai laporan *read-only* lengkap, endpoint `GET /pt/klien` bertujuan untuk navigasi cepat ke Detail Klien. Field yang dikembalikan seminimal mungkin, namun **revisi 2026-10-12** menambahkan `tujuan` dan `durasiHari` (dari siklus **aktif**; `null` bila tidak ada) agar daftar/kartu klien bisa menampilkan target & durasi tanpa panggilan tambahan. Data demografik lengkap tetap di `GET /pt/riwayat`.
 
 3. **Weekly Plan yang Perlu Direview (Resolusi "Minggu Berjalan")**
    - Mengambil *weekly plan* memakai **exact-match Senin UTC**: `minggu_mulai = getStartOfWeekUtc()` (Senin dari minggu berjalan, dihitung UTC — lihat `src/utils/week.ts`), lalu ambil **1 baris terbaru** bila ada duplikat (`ORDER BY generated_at DESC`). Query IDENTIK dengan *Dashboard PT*.
@@ -99,6 +99,8 @@ type ListKlienResponse = {
 type KlienItem = {
   id: number;
   nama: string;
+  tujuan: "turun_bb" | "naik_bb" | null; // dari siklus aktif
+  durasiHari: number | null;             // dari siklus aktif
 };
 
 // GET /pt/klien/:id
@@ -111,7 +113,8 @@ type DetailKlienResponse = {
       tinggiBadanCm: number | null; 
       bbAwalKg: number | null; 
       bbTujuanKg: number | null; 
-      tujuan: string | null 
+      tujuan: string | null; 
+      durasiHari: number | null 
     };
     grafikBb: { tanggal: string; beratKg: number }[]; // WAJIB Sorted Ascending by tanggal
   }
