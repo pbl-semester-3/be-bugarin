@@ -12,3 +12,4 @@ export * from "./activity-logs";
 export * from "./meal-logs";
 export * from "./feedbacks";
 export * from "./admin-activity-logs";
+export * from "./password-reset-tokens";

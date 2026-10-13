@@ -39,6 +39,9 @@ const envSchema = z.object({
   CLOUDINARY_FOLDER: optionalNonEmpty,
   // Opsional: Google OAuth client ID (audience). Kalau kosong, endpoint oauth google 503.
   GOOGLE_CLIENT_ID: optionalNonEmpty,
+  // Opsional: provider email Resend untuk kirim kode reset sandi. Kalau kosong, kode di-log (dev).
+  RESEND_API_KEY: optionalNonEmpty,
+  RESEND_FROM: optionalNonEmpty,
 });
 
 const parsed = envSchema.parse(process.env);

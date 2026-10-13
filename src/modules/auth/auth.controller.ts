@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../../config/env";
-import { registerSchema, loginSchema, oauthGoogleSchema } from "./auth.schema";
+import { registerSchema, loginSchema, oauthGoogleSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 hari, samakan dengan expiresIn token
@@ -73,4 +73,24 @@ export async function oauthGoogle(req: Request, res: Response, next: NextFunctio
 export async function logout(req: Request, res: Response) {
   res.clearCookie("token");
   res.json({ data: "ok" });
+}
+
+export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = forgotPasswordSchema.parse(req.body);
+    await authService.requestPasswordReset(input);
+    return res.json({ data: "ok" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = resetPasswordSchema.parse(req.body);
+    await authService.resetPassword(input);
+    return res.json({ data: "ok" });
+  } catch (err) {
+    next(err);
+  }
 }
