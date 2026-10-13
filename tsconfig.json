@@ -16,6 +16,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src/**/*.ts", "db/**/*.ts", "drizzle.config.ts"],
+  "include": ["src/**/*.ts", "db/**/*.ts", "api/**/*.ts", "drizzle.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
