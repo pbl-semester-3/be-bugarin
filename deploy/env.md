@@ -1,6 +1,6 @@
 # Environment Variables (Deploy)
 
-Set semua ini di dashboard **Render** (atau environment provider). Jangan commit nilai asli —
+Set semua ini di dashboard **Vercel** (atau provider lain). Jangan commit nilai asli —
 hanya placeholder di `.env.example`.
 
 ## Wajib
@@ -24,6 +24,8 @@ hanya placeholder di `.env.example`.
 | `CLOUDINARY_FOLDER` | Folder Cloudinary (mis. `bugarin`). |
 | `GOOGLE_CLIENT_ID` | Client ID **Web** dari Google Cloud (audience ID token). Kosong → OAuth Google 503. |
 | `ADMIN_EMAIL` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_NAMA` | Dipakai `npm run db:seed` untuk membuat akun Admin awal. Kosong → seed admin dilewati. |
+| `RESEND_API_KEY` | API key https://resend.com/api-keys untuk kirim kode reset sandi. Kosong → kode hanya di-log (dev). |
+| `RESEND_FROM` | Pengirim, mis. `Bugarin <noreply@bugarin.my.id>` (domain terverifikasi di Resend) atau `onboarding@resend.dev` untuk uji. |
 
 ## Cookie (SameSite) & domain
 

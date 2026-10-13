@@ -1,13 +1,14 @@
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import { randomBytes, randomInt } from "crypto";
-import { eq, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import { db } from "../../config/db";
 import { env } from "../../config/env";
-import { users, klienProfiles } from "../../db/schema";
+import { users, klienProfiles, passwordResetTokens } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { googleAuth } from "./google";
-import type { RegisterInput, LoginInput } from "./auth.schema";
+import { sendPasswordResetEmail } from "./mailer";
+import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "./auth.schema";
 
 type Role = "klien" | "pt" | "admin";
 
@@ -135,4 +136,60 @@ export async function loginWithGoogle(idToken: string) {
   });
 
   return { token: issueToken(created), role: created.role };
+}
+
+const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 menit
+
+// Langkah 1: kirim kode 6 digit ke email. Anti user-enumeration: selalu balas sukses
+// walau email tidak terdaftar / nonaktif (jangan bocorkan keberadaan akun).
+export async function requestPasswordReset(input: ForgotPasswordInput) {
+  const email = input.email.toLowerCase();
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+
+  if (!user || !user.isActive) return;
+
+  const kode = randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const kodeHash = await argon2.hash(kode);
+
+  // Invalidasi kode lama yang belum dipakai (hanya 1 kode aktif per user).
+  await db.update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)));
+
+  await db.insert(passwordResetTokens).values({
+    userId: user.id,
+    kodeHash,
+    expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS),
+  });
+
+  await sendPasswordResetEmail(email, kode);
+}
+
+// Langkah 2: verifikasi kode + set sandi baru. Semua kegagalan pakai pesan sama
+// (anti-enumeration & anti brute-force).
+export async function resetPassword(input: ResetPasswordInput) {
+  const email = input.email.toLowerCase();
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (!user || !user.isActive) throw new AppError(400, "Kode verifikasi salah atau kedaluwarsa");
+
+  const token = await db.query.passwordResetTokens.findFirst({
+    where: and(
+      eq(passwordResetTokens.userId, user.id),
+      isNull(passwordResetTokens.usedAt),
+      gt(passwordResetTokens.expiresAt, new Date()),
+    ),
+    orderBy: [desc(passwordResetTokens.createdAt)],
+  });
+  if (!token) throw new AppError(400, "Kode verifikasi salah atau kedaluwarsa");
+
+  const valid = await argon2.verify(token.kodeHash, input.kode);
+  if (!valid) throw new AppError(400, "Kode verifikasi salah atau kedaluwarsa");
+
+  const passwordHash = await argon2.hash(input.passwordBaru);
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+    await tx.update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, token.id));
+  });
 }

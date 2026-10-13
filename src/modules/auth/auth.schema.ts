@@ -18,3 +18,15 @@ export const oauthGoogleSchema = z.object({
   idToken: z.string().min(1, "idToken wajib diisi"),
 });
 export type OauthGoogleInput = z.infer<typeof oauthGoogleSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Format email tidak valid"),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email("Format email tidak valid"),
+  kode: z.string().regex(/^\d{6}$/, "Kode harus 6 digit"),
+  passwordBaru: z.string().min(8, "Password baru minimal 8 karakter"),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
