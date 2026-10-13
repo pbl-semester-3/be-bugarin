@@ -43,6 +43,13 @@
       "when": 1791818077484,
       "tag": "0005_legal_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791900154126,
+      "tag": "0006_heavy_lyja",
+      "breakpoints": true
     }
   ]
 }
