@@ -52,11 +52,13 @@ Ditambahkan untuk memenuhi baseline requirement kampus (wajib ada kategori Tabel
 - `kalori_terbakar` dan `kalori_masuk` dihitung backend pakai rumus dari data master saat insert (snapshot, disimpan permanen walau data master berubah nanti) — bukan tebakan AI mentah tiap kali.
 - `jarak_meter` nullable, tampil di UI kalau `master_olahraga.butuh_jarak = true`.
 
-## 7. Streak Logic (OR)
+## 7. Streak Logic (OR, Akumulatif per Siklus)
 
-- Streak di dashboard klien **bukan kolom tersendiri** — dihitung on-the-fly (atau lewat scheduled aggregation) dari kondisi:
-  `EXISTS(activity_logs WHERE tanggal = X) OR EXISTS(meal_logs WHERE tanggal = X)`
-- Klien hanya input makanan tanpa olahraga di hari itu → tetap dihitung streak (sesuai keputusan awal).
+- Streak di dashboard klien **disimpan persisten** di kolom `progress_cycles.streak` (revisi 2026-10-02; bukan lagi dihitung on-read).
+- Nilainya = jumlah **hari unik** (`DISTINCT tanggal`)yang memenuhi `EXISTS(activity_logs WHERE tanggal = X) OR EXISTS(meal_logs WHERE tanggal = X)`, dibatasi pada window siklus (`tanggal_mulai` s.d. `tanggal_selesai`/hari ini).
+- Streak **akumulatif dan tidak pernah reset** selama siklus berjalan: hari tanpa log membuat nilai beku, dan saat klien log lagi nilainya dilanjutkan dari angka terakhir. Reset hanya terjadi saat klien memulai siklus baru (mulai dari 0).
+- Klien hanya input makanan tanpa olahraga di hari itu → tetap dihitung +1 (logika OR).
+- Update realtime saat insert `activity_logs`/`meal_logs`; backfill data lama lewat `npm run db:backfill-streak`. Detail: `CATATAN.md`.
 
 ## 8. Feedback
 

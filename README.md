@@ -17,7 +17,8 @@ npm run db:seed
 npm run dev              # http://localhost:4000
 ```
 
-Detail lengkap (termasuk deploy ke Render/Aiven) ada di `docs/SETUP.md`.
+Detail setup lokal: `docs/SETUP.md`. Panduan **deploy** (Render/Aiven/Vercel/cron/OAuth):
+folder [`deploy/`](./deploy/README.md).
 
 ## Struktur
 
@@ -31,12 +32,18 @@ src/
  └─ app.ts, server.ts
 ```
 
-Modul `klien`, `pt`, `admin` baru berisi stub (`/ping`) — implementasikan endpoint lengkap
-sesuai `Bugarin_PRD_Backend_AI.md` bab 4, ikuti pola di skill `express-typescript-patterns`
-(routes → controller → service, jangan query Drizzle langsung di controller).
+Ikuti pola di skill `express-typescript-patterns` (routes → controller → service; jangan query
+Drizzle langsung di controller) dan `api-contract-bugarin` (envelope `{ data, meta }`, camelCase).
 
-## Yang Sudah Jalan
-- `POST /auth/register`, `/auth/login`, `/auth/logout` (khusus klien untuk register)
-- `GET /master/olahraga`, `/master/makanan?q=`
-- `POST /internal/jobs/generate-weekly-plan` (dilindungi header `x-cron-secret`)
-- Auth guard JWT (cookie untuk web via header `X-Client-Type: web`, bearer token untuk mobile)
+## Fitur (sudah lengkap)
+- **Auth**: register/login/logout klien; OAuth Google (klien); guard JWT (cookie web via
+  `X-Client-Type: web`, bearer token mobile); soft-delete (`is_active`) menolak login/sesi.
+- **Klien**: profil & onboarding, progres (activity/meal logs), PT ku (pairing), riwayat,
+  feedback, dashboard, foto profil.
+- **PT**: profil, verifikasi/pairing, klien detail (grafik BB + approve/override weekly plan),
+  dashboard, feedback ke klien, riwayat, foto profil.
+- **Admin**: profil, CRUD user (+ soft-delete, buat akun PT), dashboard, riwayat.
+- **Master data**: `GET /master/olahraga`, `GET /master/makanan?q=`.
+- **Jobs**: `POST /internal/jobs/generate-weekly-plan` (dilindungi `x-cron-secret`).
+
+Panduan deploy: [`deploy/`](./deploy/README.md).

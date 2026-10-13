@@ -38,7 +38,7 @@ Tidak ada proses mutasi data, pemanggilan AI, maupun pembuatan tabel baru di fit
 ## Business Rules
 
 1. **Jumlah Klien Aktif**
-   - Diambil dari jumlah *row* (COUNT) pada tabel `klien_profiles` di mana field `pt_id` sama dengan `req.user.id` (PT yang login).
+   - Diambil dari jumlah *row* (COUNT) pada tabel `klien_profiles` di mana field `pt_id` sama dengan `pt_profiles.id` milik PT yang login (resolve `pt_profiles.id` dari `req.user.id` terlebih dahulu — `users.id` dan `pt_profiles.id` tidak dijamin sama).
    - **Definisi "Aktif"**: Murni diartikan sebagai "klien yang sudah di-pairing dengan PT ini". Klien tetap dihitung aktif meskipun mereka belum memiliki `progress_cycles` yang sedang berjalan atau `weekly_plans`. Sebagai PT, mereka perlu memonitor semua klien yang menjadi tanggung jawabnya (termasuk klien baru yang belum memulai progres).
 
 2. **Filter Status Weekly Plan untuk Jadwal Gabungan**
@@ -47,8 +47,8 @@ Tidak ada proses mutasi data, pemanggilan AI, maupun pembuatan tabel baru di fit
 
 3. **Struktur Agregasi Jadwal Latihan**
    - Diekstrak dari field JSON `workout_plan` pada record `weekly_plans` milik klien PT.
-   - **Definisi "Minggu Berjalan"**: Tabel `weekly_plans` memiliki field `minggu_mulai` (bertipe `DATE`). Karena plan satu klien di-generate terus setiap minggu, klien akan memiliki banyak baris historis. Untuk mengambil jadwal minggu ini secara konsisten, query harus mengambil **1 baris terbaru** per klien (diurutkan berdasarkan `minggu_mulai` DESC LIMIT 1 per klien) di mana syarat utamanya adalah `minggu_mulai <= CURRENT_DATE`.
-   - **Justifikasi Pendekatan**: Pendekatan baris terbaru (berdasarkan urutan waktu ke belakang) dipilih karena lebih *robust* terhadap kemungkinan *cron job* `generate-weekly-plan` terlambat berjalan (misal server sempat down sehingga plan baru di-generate hari Selasa bukan Senin). Pendekatan rentang 7 hari kaku berisiko gagal menangkap plan valid jika minggu_mulai meleset sedikit. Selain itu, cara ini lebih sederhana secara query.
+   - **Definisi "Minggu Berjalan"**: Tabel `weekly_plans` memiliki field `minggu_mulai` (bertipe `DATE`). Karena plan satu klien di-generate terus setiap minggu, klien akan memiliki banyak baris historis. Untuk mengambil jadwal minggu ini, query memakai **exact-match Senin UTC**: `minggu_mulai = getStartOfWeekUtc()` (lihat `src/utils/week.ts`), lalu ambil **1 baris terbaru** bila ada duplikat (`ORDER BY generated_at DESC`).
+   - **Justifikasi Pendekatan**: Disamakan dengan sisi Klien dan cron (revisi 2026-10-03). Sebelumnya memakai "baris terbaru `minggu_mulai <= CURRENT_DATE`", namun itu tidak konsisten dengan reader klien yang exact-match Senin. Konsekuensi yang diterima: bila plan minggu ini belum ter-generate, jadwal tidak muncul (bukan mengambil plan minggu lalu).
    - **Struktur Flat List**: Jadwal **TIDAK** dikelompokkan (nested) per klien. Semua item olahraga dari seluruh klien digabungkan dan diratakan (flatten) menjadi satu array (daftar baris), di mana setiap baris mewakili 1 sesi olahraga (mengandung `klienId`, `namaKlien`, `hari`, `jam`, `jenis`, `lokasi`).
    - Jadwal harus diurutkan secara kronologis hari dalam seminggu (Senin hingga Minggu), lalu berdasarkan jam.
 
@@ -121,9 +121,9 @@ src/modules/pt/
 ## Urutan Implementasi
 
 1. **Service (`pt.service.ts`)**:
-   - Hitung (COUNT) jumlah `klien_profiles` yang field `pt_id`-nya sama dengan `req.user.id`.
+   - Hitung jumlah `klien_profiles` yang field `pt_id`-nya sama dengan `pt_profiles.id` milik PT login (resolve `pt_profiles.id` dari `req.user.id` terlebih dahulu).
    - Ambil profil PT saat ini untuk mendapatkan data `tempat_gym`.
-   - Lakukan JOIN dari `klien_profiles` (milik PT ini) ke `weekly_plans` untuk mengambil plan minggu berjalan menggunakan pendekatan row terbaru (filter `minggu_mulai <= CURRENT_DATE` lalu ambil row dengan urutan `minggu_mulai` DESC LIMIT 1 per klien) DAN pastikan `status IN ('disetujui', 'override')`.
+   - Lakukan JOIN dari `klien_profiles` (milik PT ini) ke `weekly_plans` untuk mengambil plan minggu berjalan menggunakan exact-match Senin UTC (`minggu_mulai = getStartOfWeekUtc()`, `ORDER BY generated_at DESC` bila duplikat) DAN pastikan `status IN ('disetujui', 'override')`.
    - Loop dan *flatten* isi kolom JSON `workout_plan` dari hasil query, sematkan `nama` klien dari row tersebut, dan sematkan `tempat_gym` ke setiap item.
    - **Sorting Hari (Wajib di level Aplikasi)**: Array hasil flatten harus diurutkan hari dan jamnya. Lakukan *sorting* index array secara eksplisit menggunakan referensi (misalnya konstan `['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']`) agar hasilnya benar secara kronologis. Jangan gunakan *string order* bawaan database/JS karena "Jumat" akan muncul sebelum "Kamis" secara alfabet.
 2. **Controller (`pt.controller.ts`)**:
@@ -149,7 +149,7 @@ src/modules/pt/
 |---|---|
 | PT belum memiliki klien sama sekali (belum ada yang di-pairing) | `jumlahKlienAktif: 0`, `jadwalLatihan: []` (TIDAK ERROR 404). |
 | Klien PT ada, tapi tidak satupun yang punya weekly plan disetujui minggu ini | `jumlahKlienAktif: X`, `jadwalLatihan: []`. |
-| Field `tempat_gym` PT kosong (misal data kotor/bypass sistem) | `lokasi: ""` (string kosong, jangan biarkan melempar error *null pointer* saat menyisipkan nilai lokasi ke jadwal). |
+| Field `tempat_gym` PT kosong (misal data kotor/bypass sistem) | `lokasi: "-"` (placeholder, jangan biarkan melempar error *null pointer* saat menyisipkan nilai lokasi ke jadwal). |
 | Salah satu plan klien masih `pending_review` | Jadwal tersebut tidak dimuat di array `jadwalLatihan`. |
 
 ---

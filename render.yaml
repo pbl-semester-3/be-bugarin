@@ -1,0 +1,52 @@
+# Render Blueprint — Bugarin Backend
+#
+# Cara pakai: Render → New → Blueprint → pilih repo ini.
+# Env bertanda `sync: false` diisi MANUAL di dashboard Render (rahasia, tidak disimpan di git).
+# Detail lengkap: lihat deploy/runbook.md & deploy/env.md.
+#
+# Catatan: variabel opsional (CLOUDINARY_*, GOOGLE_CLIENT_ID, ADMIN_*) boleh dibiarkan kosong —
+# backend memperlakukan kosong sebagai "tidak dikonfigurasi" (fitur terkait 503 / seed admin dilewati).
+
+services:
+  - type: web
+    name: bugarin-backend
+    runtime: node
+    plan: free
+    branch: dev            # staging. Ganti ke `main` untuk service production.
+    autoDeploy: true
+    # --include=dev WAJIB: NODE_ENV=production membuat npm melewatkan devDependencies,
+    # sehingga `tsc` (TypeScript) tidak terpasang dan `npm run build` gagal.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COOKIE_SAMESITE
+        value: lax          # FE & BE satu site (custom domain api.bugarin.my.id) -> cukup lax
+      # Wajib (isi di dashboard):
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      # Opsional (boleh dikosongkan):
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAMA
+        value: Super Admin

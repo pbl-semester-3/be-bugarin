@@ -1,11 +1,41 @@
 import { Router } from "express";
 import { authGuard } from "../../middlewares/auth-guard";
+import { uploadSinglePhoto } from "../../middlewares/upload";
+import { ptController } from "./pt.controller";
 
 const router = Router();
 
-// TODO: implementasikan seluruh endpoint sesuai Bugarin_PRD_Backend_AI.md bab 4.2
-// (profile + tempat_gym wajib, dashboard-summary, pairing-requests, klien detail + grafik,
-// weekly-plan approve/override, riwayat, feedbacks).
+// Endpoint Profil PT
+router.get("/profile", authGuard(["pt"]), ptController.getProfile);
+router.put("/profile", authGuard(["pt"]), ptController.updateProfile);
+router.post("/profile/photo", authGuard(["pt"]), uploadSinglePhoto(), ptController.uploadProfilePhoto);
+router.delete("/profile/photo", authGuard(["pt"]), ptController.deleteProfilePhoto);
+router.put("/password", authGuard(["pt"]), ptController.changePassword);
+router.put("/theme", authGuard(["pt"]), ptController.changeTheme);
+
+// Endpoint Dashboard PT
+router.get("/dashboard-summary", authGuard(["pt"]), ptController.getDashboardSummary);
+
+// Endpoint Klien Detail PT
+router.get("/klien", authGuard(["pt"]), ptController.listKlien);
+router.get("/klien/:id", authGuard(["pt"]), ptController.getKlienDetail);
+router.get("/klien/:id/weekly-plan", authGuard(["pt"]), ptController.getKlienWeeklyPlan);
+router.put("/weekly-plan/:id/approve", authGuard(["pt"]), ptController.approveWeeklyPlan);
+router.put("/weekly-plan/:id/override", authGuard(["pt"]), ptController.overrideWeeklyPlan);
+
+// Endpoint Feedback PT ke Klien
+router.post("/klien/:id/feedbacks", authGuard(["pt"]), ptController.createFeedback);
+
+// Endpoint Riwayat Klien PT
+router.get("/riwayat", authGuard(["pt"]), ptController.getRiwayatPT);
+
+// Endpoint PT Ku (Rekomendasi PT untuk Klien)
+// Harus di-mount di /pt (di app.ts: app.use("/pt", ptRoutes))
+router.get("/recommendations", authGuard(["klien"]), ptController.getPtRecommendations);
+
+// Endpoint merespon request pairing (Oleh PT)
+router.get("/pairing-requests", authGuard(["pt"]), ptController.getPairingRequests);
+router.put("/pairing-requests/:id", authGuard(["pt"]), ptController.respondPairingRequest);
 
 router.get("/ping", authGuard(["pt"]), (req, res) => {
   res.json({ data: `pt ${req.user?.id} ok` });

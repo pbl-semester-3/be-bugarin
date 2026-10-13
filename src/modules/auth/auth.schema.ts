@@ -13,3 +13,8 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password wajib diisi"),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const oauthGoogleSchema = z.object({
+  idToken: z.string().min(1, "idToken wajib diisi"),
+});
+export type OauthGoogleInput = z.infer<typeof oauthGoogleSchema>;

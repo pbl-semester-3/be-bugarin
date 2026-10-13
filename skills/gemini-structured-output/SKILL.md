@@ -79,7 +79,7 @@ export async function generateWeeklyPlan(input: {
   tujuan: "turun_bb" | "naik_bb";
 }) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-flash-latest",
     systemInstruction:
       "Kamu adalah asisten perencana program kebugaran. Susun jadwal latihan 2-3 hari/minggu " +
       "dan rencana makan harian. JANGAN sarankan makanan yang mengandung alergi yang disebutkan.",
@@ -114,7 +114,7 @@ const feedbackSchema = {
 };
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-flash-latest",
   systemInstruction:
     "Kamu adalah AI health coach yang suportif dan singkat. Maksimal 2 kalimat. " +
     "Tidak memberi saran medis spesifik.",
@@ -139,7 +139,7 @@ const foodEstimationSchema = {
 
 export async function estimateFoodCalories(namaMakanan: string) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-flash-latest",
     systemInstruction: "Kamu adalah asisten estimasi nilai gizi makanan Indonesia.",
     generationConfig: { responseMimeType: "application/json", responseSchema: foodEstimationSchema },
   });

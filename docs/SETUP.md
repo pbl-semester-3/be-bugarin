@@ -20,6 +20,11 @@ cp .env.example .env
 - `JWT_SECRET` — generate: `openssl rand -base64 32`
 - `GEMINI_API_KEY` — ambil dari https://aistudio.google.com/apikey (boleh pakai API key sendiri untuk dev lokal)
 - `CRON_SECRET` — string acak bebas, buat lindungi endpoint trigger cron
+- `CLOUDINARY_URL` — (opsional) untuk foto profil klien; salin baris "API environment variable" dari dashboard Cloudinary (format `cloudinary://key:secret@cloud_name`). Kalau kosong, endpoint foto mengembalikan 503.
+- `GOOGLE_CLIENT_ID` — (opsional) untuk login Google klien; ambil dari Google Cloud Console. Kalau kosong, `POST /auth/oauth/google` mengembalikan 503.
+- `ADMIN_EMAIL` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_NAMA` — (opsional) dipakai `npm run db:seed` untuk membuat **akun Admin awal** (Admin tidak bisa self-register). Kalau kosong, seed admin dilewati. Idempotent: admin yang sudah ada tidak ditimpa (reset password admin lewat jalur lain, bukan seed).
+- `WEB_ORIGIN` — origin Frontend yang boleh akses API (CORS). Boleh **beberapa dipisah koma** (mis. `http://localhost:3000,https://bugarin.my.id`). Default lokal: `http://localhost:3000`.
+- `COOKIE_SAMESITE` — (opsional) atribut SameSite cookie auth web: `lax` (default) / `strict` / `none`. Pakai `none` (butuh HTTPS) **hanya** bila FE & BE beda site (mis. `*.vercel.app` + `*.onrender.com`). Kalau keduanya satu domain (mis. `bugarin.my.id` + `api.bugarin.my.id`), cukup `lax`.
 - `DATABASE_URL` — biarkan default kalau pakai `docker compose` (port 3307, sengaja beda dari default 3306 Laragon/MySQL lokal biar tidak bentrok)
 
 ```bash
@@ -42,6 +47,9 @@ Kalau dapat response `{"data":{"token":"...","role":"klien"}}` — backend bener
 **Cek data**: pakai `npx drizzle-kit studio`, atau `docker exec -it bugarin-mysql mysql -u bugarin -pbugarin_dev bugarin_dev`, atau GUI client apa pun (DBeaver/TablePlus/HeidiSQL) ke `localhost:3307`.
 
 ## Deployment Dev/Staging (gratis)
+
+> Panduan deploy yang lebih lengkap & terpelihara ada di [`deploy/`](../deploy/README.md)
+> (env, runbook, one-time scripts, checklist, rollback). Bagian di bawah ini ringkasan.
 
 Supaya tim Frontend & Mobile **tidak perlu jalanin backend/database apa pun secara lokal**:
 

@@ -38,7 +38,7 @@ Fitur ini merupakan pintu gerbang komunikasi searah-terbatas dari Personal Train
 ## Business Rules
 
 1. **Ownership Check Ketat (Security)**
-   - Parameter `:id` mewakili `klien_id`. Backend **WAJIB** menyeleksi silang ke tabel `klien_profiles` untuk memastikan bahwa `klien_profiles.pt_id === req.user.id`.
+   - Parameter `:id` mewakili `klien_id`. Backend **WAJIB** menyeleksi silang ke tabel `klien_profiles` untuk memastikan bahwa `klien_profiles.pt_id === pt_profiles.id` milik PT login (resolve `pt_profiles.id` dari `req.user.id` terlebih dahulu — `users.id` dan `pt_profiles.id` tidak dijamin sama).
    - Bila validasi hak milik ini gagal (klien tidak ada, atau klien milik PT lain), sistem mutlak mengembalikan HTTP 404 (`"Data tidak ditemukan"`). Jangan pernah menggunakan HTTP 403 atau pesan spesifik untuk menyembunyikan kebocoran identitas.
 
 2. **Re-use Data List Klien (Tanpa Duplikasi Endpoint)**
@@ -46,7 +46,7 @@ Fitur ini merupakan pintu gerbang komunikasi searah-terbatas dari Personal Train
    - Karena endpoint `GET /pt/klien` di *PRD-klien-detail-pt.md* telah dirancang secara sangat minimalis dan eksklusif (hanya mengembalikan field `id` dan `nama`), maka halaman Feedback PT **wajib melakukan re-use** terhadap endpoint tersebut. Kita tidak akan memproduksi endpoint list klien baru di fitur/modul ini demi menjunjung DRY (*Don't Repeat Yourself*).
 
 3. **Injeksi Data dan Atribut Skema (Sinkronisasi dengan Sisi Klien)**
-   - Kolom yang di-*insert* ke tabel `feedbacks` adalah: `klien_id` (dari URL), `pt_id` (dari `req.user.id`), `source` (otomatis di-set `'pt'`), `pesan` (dari *body* request), `dibaca` (otomatis `false`), `balasan_klien` (otomatis `null`).
+   - Kolom yang di-*insert* ke tabel `feedbacks` adalah: `klien_id` (dari URL), `pt_id` (dari `pt_profiles.id` milik PT login), `source` (otomatis di-set `'pt'`), `pesan` (dari *body* request, di-*trim*), `dibaca` (otomatis `false`), `balasan_klien` (otomatis `null`).
    - Tidak ada kolom `pesan_feedback` atau `updated_at`. Skema harus patuh 100% pada aturan di `bugarin_erd.mermaid` dan `fitur/klien/PRD-feedback-klien.md`.
    - Operasi penambahan yang sukses harus mengembalikan **HTTP 201 Created**, bukan 200.
 

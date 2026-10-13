@@ -38,17 +38,19 @@ Fitur ini melengkapi Admin dengan wewenang sentral (CRUD) untuk mengelola seluru
 1. **Pemilahan Pengambilan Data (`GET /admin/users`)**: 
    - *Query parameter* `role` mutlak dibutuhkan (`?role=klien` atau `?role=pt`). 
    - Apabila pencarian dilakukan untuk `role=klien`, respons akan menggabungkan *record* dari tabel `users` dan `klien_profiles`. Sebaliknya untuk `role=pt`, balasan dikawinkan dengan data `pt_profiles`.
-2. **Keterbatasan Beban Admin (`POST /admin/users/pt`)**:
-   - Admin HANYA men-suplai informasi fundamental minimal: `nama`, `email`, dan `username`. (Ketiganya wajib diisi oleh Admin).
-   - **Distribusi insert ke tabel**: `email`, `username`, dan `password_hash` (auto-generate) masuk ke tabel `users`; `nama` masuk ke tabel `pt_profiles` (karena kolom `nama` ada di tabel profile masing-masing role, bukan di `users` — sesuai ERD).
-   - Fitur pendukung spesifik PT (seperti `usia`, `jenisKelamin`, `spesialisasi`, dan `tempatGym`) SENGAJA dilewati (*null*) pada tabel `pt_profiles` agar dilengkapi oleh si PT tersebut saat kali perdana ia *login* (konsisten dengan ketetapan pembagian tanggung jawab pada modul PT).
-3. **Pembangkitan Kredensial Sementara (Auto-Generate)**:
-   - Sesuai dengan anjuran keamanan aplikasi, Admin **tidak disarankan** untuk memasukkan *password* secara bebas (*plaintext* tebakan). Sistem Backend WAJIB meracik sebuah *temporary password* acak (minimal 8 karakter alfanumerik) dengan kriptografi aman saat melakukan `POST`.
-   - *Password* acak tersebut harus di-*hash* via **bcrypt/argon2** sebelum menyentuh pangkalan data `users`.
-   - **Tampilan Satu Kali**: Dalam balasan *response* berhasil 201, *password plaintext* akan dihidangkan SEKALI SAJA di properti khusus (misal: `temporaryPassword`) untuk kemudian disalin (di-*copy*) oleh Admin secara manual dan diserahkan ke PT bersangkutan. Jangan pernah mengekspos kata sandi ini di endpoint `GET /users` setelahnya.
-4. **Penanganan Integritas Data & Dangling References (`DELETE`)**:
-   - **Penghapusan Klien (Hard-Delete)**: Admin akan melakukan penghapusan permanen (*hard-delete*). **Analisis Trade-off**: Klien memuat relasi histori metrik grafik BB dan daftar laporan riwayat PT (lihat `PRD-riwayat-pt` dan `PRD-klien-detail-pt`). Bila kita hanya melakukan *soft-delete*, histori ini menggantung dengan sia-sia, sementara saat Klien dihapus murni ia otomatis menguap dari layar daftar Klien si PT yang bersangkutan. Karena hilangnya klien ini tidak membahayakan modul lain, diputuskan menggunakan skenario **Hard-Delete**. *Trigger cascade* DB secara eksplisit akan menyapu tabel: `klien_profiles`, `progress_cycles`, `weight_logs`, `activity_logs`, `meal_logs`, `weekly_plans`, `feedbacks`, dan `pairing_requests`.
-   - **Penghapusan PT (Soft-Delete)**: Berbeda kebijakannya dengan Klien, penghapusan akun PT memakai pendekatan **Soft-Delete** (misal dengan penambahan *flag* status `is_active = false` atau kolom `deleted_at`). **Analisis Trade-off**: Membunuh data PT (*hard-delete* atau peniadaan kolom FK ke *null*) akan menghilangkan riwayat penting "siapa sosok pelatih yang dulu menerima/menolak klien ini" yang bersemayam pada riwayat `pairing_requests`. Demi menjaga sejarah sistem (layaknya snapshot), *soft-delete* dipilih agar seluruh belenggu *foreign key constraint* utuh. PT yang dihapus dilarang *login* dan disembunyikan dari daftar rekomendasi pendaftaran, TETAPI terhadap klien yang **saat ini sedang dilatihnya**, PT itu harus direlakan: memantik fungsi tambahan membatalkan ikatan (*dangling client*) yaitu `UPDATE klien_profiles SET pt_id = NULL WHERE pt_id = X` serta melenyapkan semua `pairing_requests` yang masih *pending*.
+2. **Keterbatasan Beban Admin (`POST /admin/users/pt`) — [REVISI 2026-10-10]**:
+   - Admin menyuplai: `nama`, `email`, `username`, dan `password`. (Semuanya wajib).
+   - **Distribusi insert ke tabel**: `email`, `username`, dan `password_hash` masuk ke tabel `users`; `nama` masuk ke tabel `pt_profiles` (kolom `nama` ada di tabel profile, bukan di `users` — sesuai ERD).
+   - Fitur pendukung spesifik PT (`usia`, `jenisKelamin`, `spesialisasi`, `tempatGym`) SENGAJA dibiarkan *null* pada `pt_profiles` agar dilengkapi PT saat login pertama.
+3. **Password Diketik Admin — [REVISI 2026-10-10]**:
+   - Password di-*set* **manual oleh Admin** saat `POST` (bukan auto-generate). Backend WAJIB meng-*hash* (argon2) sebelum menyimpan ke `users.password_hash`.
+   - **Tidak ada** `temporaryPassword` di response. Password plaintext tidak pernah dikembalikan/disimpan.
+4. **Penanganan Integritas Data & Dangling References (`DELETE`) — [REVISI 2026-10-10] Soft-Delete Seragam**:
+   - **Klien & PT sama-sama Soft-Delete**: `DELETE /admin/users/:id` **tidak** menghapus baris. Aksi = `users.is_active = false` (nonaktifkan). Data histori (progres, log, feedback, pairing) **tetap utuh** untuk audit.
+   - **Lepas ikatan klien**: `UPDATE klien_profiles SET pt_id = NULL` — untuk PT yang dinonaktifkan (`WHERE pt_id = X`) maupun klien yang dinonaktifkan (`WHERE id = X`).
+   - **Bersihkan request menggantung**: hapus `pairing_requests` berstatus `pending` milik PT/klien tersebut (riwayat `diterima`/`ditolak` tetap disimpan).
+   - **Efek**: user nonaktif diblokir login, ditolak `authGuard`, dan hilang dari rekomendasi PT; klien nonaktif otomatis hilang dari daftar/dashboard PT karena `pt_id` di-null.
+   - *Alasan revisi*: semula klien dirancang *hard-delete*; diubah ke *soft-delete* demi keamanan data & reversibilitas. Karena tidak ada penghapusan baris, **tidak diperlukan migrasi FK/cascade**.
 5. **Kewajiban Log Audit**: Seluruh operasi yang menulis modifikasi (POST, PUT, DELETE) WAJIB dilangsungkan dalam satu gelembung **DB Transaction** yang menyatu (se-irama) dengan operasi `INSERT` ke tabel `admin_activity_logs`. Kolom aktivitas mendeskripsikan ringkasan tindak-tanduk, contoh: `"Admin membuat akun PT: Budi"` atau `"Admin menghapus Klien ID: 12"`.
 
 ## Keputusan Desain (Final)
@@ -99,14 +101,13 @@ Berbeda dari PRD terdahulu yang tidak mengubah skema tabel eksisting, keputusan 
     "email": "pt.baru@bugarin.com",
     "username": "ptbaru",
     "role": "pt",
-    "ptProfile": {
-      "nama": "Agus PT"
-    },
-    "temporaryPassword": "K8!p(xW2"
+    "ptProfile": { "nama": "Agus PT" }
   }
 }
 ```
-*(Ingat: `temporaryPassword` hanya muncul murni 1x pada kembalian saat sukses diciptakan).*
+*(Password diketik Admin; tidak ada `temporaryPassword`.)*
+
+> `klienProfile` pada `GET /admin/users?role=klien` juga menyertakan `tujuan: "turun_bb" | "naik_bb" | null` (dari `progress_cycles` siklus **aktif**, `null` bila belum ada).
 
 ## Validasi (Zod) & Autorisasi
 
@@ -122,16 +123,18 @@ getUsersQuerySchema: {
 createPtSchema: { 
   nama: string.min(1), 
   email: string.email(), 
-  username: string.min(3) 
+  username: string.min(3).max(50),
+  password: string.min(8)   // diketik Admin manual
 }
 
-// PUT /admin/users/:id
+// PUT /admin/users/:id  (target hanya klien/PT)
 updateUserSchema: { 
   nama?: string.min(1),
   email?: string.email(),
-  username?: string.min(3)
+  username?: string.min(3).max(50),
+  password?: string.min(8)  // password baru (opsional) — menutup gap 6.6
   // nama → menyasar tabel profile role target (pt_profiles/klien_profiles)
-  // email, username → menyasar tabel users
+  // email, username, password → menyasar tabel users
 }
 ```
 

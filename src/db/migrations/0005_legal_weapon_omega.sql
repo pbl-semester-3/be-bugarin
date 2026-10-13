@@ -1,0 +1,1 @@
+ALTER TABLE `pt_profiles` ADD `foto_public_id` varchar(255);

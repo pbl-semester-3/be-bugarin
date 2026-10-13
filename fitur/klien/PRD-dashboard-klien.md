@@ -42,11 +42,13 @@ Endpoint ini didesain spesifik untuk kebutuhan UI Dashboard dan sangat bergantun
    - Wajib mengambil data siklus yang berstatus `aktif` milik pengguna yang bersangkutan.
    - Jika tidak ada *progress cycle* yang aktif, kembalikan field ini dengan nilai `null`.
 
-3. **Streak**
-   - **HARUS** mengikuti persis logika OR dari *schema notes*: `EXISTS(activity_logs) OR EXISTS(meal_logs)` pada tanggal yang sama per klien.
-   - Streak "confirmed" dihitung mundur mulai dari **KEMARIN** (bukan hari ini), berhenti saat menemukan hari yang mengevaluasi logika OR di atas sebagai `false`.
-   - SETELAH itu, cek apakah **HARI INI** juga sudah ada log aktivitas (dengan logika OR yang sama). Kalau ya, tambahkan +1 ke angka streak *confirmed* di atas. Kalau belum, kembalikan angka streak *confirmed* apa adanya (jangan kembalikan `0` hanya karena klien belum sempat log hari ini — hari ini belum berakhir, jangan dianggap gagal).
-   - Nilai kembalian berupa integer angka hari berturut-turut (jika kemarin dan hari-hari sebelumnya tidak ada aktivitas, baru kembalikan `0`).
+3. **Streak (Akumulatif per Siklus, Tidak Pernah Reset dalam Siklus)**
+   - `streak` = jumlah **hari unik** (`DISTINCT tanggal`) yang memiliki minimal 1 `activity_logs` **ATAU** `meal_logs` (logika OR per tanggal), dihitung di dalam window siklus aktif (`tanggal >= progress_cycles.tanggal_mulai`; batas atas memakai `tanggal_selesai` bila siklus sudah selesai, atau tanggal hari ini bila masih aktif).
+   - Nilai ini **akumulatif dan tidak pernah reset** selama siklus berjalan. Hari tanpa log hanya membuat nilai **beku** (tidak menambah, tidak kembali ke `0`).
+   - Saat klien mencatat log lagi setelah jeda, nilai **dilanjutkan dari angka terakhir** (mis. `4` -> `5`), bukan dimulai ulang dari `1`.
+   - Nilai dimulai dari `0` saat siklus baru dibuat (`POST /klien/progress-cycles`), sehingga streak **mengulang per siklus**.
+   - Jika tidak ada siklus aktif, kembalikan `streak: 0`.
+   - Disimpan persisten di kolom `progress_cycles.streak` dan di-update **realtime** setiap insert `activity_logs`/`meal_logs` dengan recompute `COUNT(DISTINCT tanggal)` (idempotent, aman dari double-count). Lihat `CATATAN.md`.
 
 4. **Jadwal Latihan Mingguan**
    - Diambil dari field `workout_plan` pada tabel `weekly_plans` untuk minggu berjalan.
@@ -59,12 +61,16 @@ Endpoint ini didesain spesifik untuk kebutuhan UI Dashboard dan sangat bergantun
 
 ## Keputusan Desain (Open Questions / Gaps)
 
-- **[OPEN QUESTION] Performa Perhitungan Streak:** Perhitungan streak saat ini berdasar query loop mundur `EXISTS` tanggal atau agregasi *window function*. Jika histori klien membesar setelah 1-2 tahun, ini dapat memperlambat load dashboard. **Pertanyaan/Saran:** Apakah kita sebaiknya implementasi query dinamis on-the-fly dulu untuk MVP, atau perlukah kita menambahkan precompute / penampung (caching/cron-recalculate streak value) ke tabel `klien_profiles`? 
+- **[RESOLVED — 2026-10-02] Performa Perhitungan Streak:** Diputuskan memakai **nilai persisten** `progress_cycles.streak` yang di-recompute realtime saat insert log (bukan loop mundur on-read). Ini menghilangkan beban kalkulasi streak dari `GET /dashboard-summary` dan mendukung streak akumulatif per siklus. Backfill data lama lewat `npm run db:backfill-streak`. Detail: `CATATAN.md`.
 - **Batasan Murni Read-Only (Tanpa Side-Effect):** Tidak boleh ada aksi yang mengubah status atau men-trigger *weekly_plan* via AI saat dashboard diakses. Ini mutlak dibebankan pada proses lain.
 
 ## Skema Data
 
-Tidak ada skema yang diubah. Seluruh dependensi merujuk pada existing Drizzle schema:
+Ada **1 perubahan skema** (sejak revisi 2026-10-02): kolom `progress_cycles.streak`
+(`int NOT NULL DEFAULT 0`) untuk menyimpan streak akumulatif per siklus. Migration lewat
+`npm run db:generate`, lalu backfill data lama lewat `npm run db:backfill-streak`.
+
+Seluruh dependensi lain merujuk pada existing Drizzle schema:
 - `klien_profiles`
 - `pt_profiles`
 - `progress_cycles`
@@ -87,9 +93,11 @@ type DashboardSummary = {
     spesialisasi: "turun_bb" | "naik_bb";
   } | null;
   targetKaloriHariIni: number | null;
+  kaloriMasukHariIni: number | null; // SUM meal_logs hari ini; 0 bila ada cycle aktif tanpa log; null bila tidak ada cycle aktif
   streak: number;
   jadwalMingguan: WorkoutPlanItem[]; // Menggunakan struct JSON database, Array kosong jika masih pending_review
   isReminderActive: boolean;
+  unreadFeedbackCount: number; // jumlah feedbacks dibaca=false (tambahan dari fitur feedback-klien)
 };
 
 type WorkoutPlanItem = {
@@ -117,8 +125,7 @@ src/modules/klien/
 
 1. `klien.service.ts`: Tambah method `getDashboardSummaryData(klienId: number)`
    - Ambil data `klien_profiles` JOIN dengan `pt_profiles`.
-   - Ambil `progress_cycles` yang berstatus aktif.
-   - Eksekusi helper logic penghitungan `streak`.
+   - Ambil `progress_cycles` yang berstatus aktif (termasuk kolom `streak` persisten).
    - Ambil `weekly_plans` milik klien pada rentang minggu tersebut dan terapkan filter status (*disetujui/override*).
 2. `klien.controller.ts`: Panggil service tersebut, bungkus payload di balutan format respons `data: {}`.
 3. `klien.routes.ts`: Deklarasi `router.get('/dashboard-summary', authGuard(['klien']), ...)`
@@ -138,14 +145,16 @@ src/modules/klien/
 | Klien mendaftar tapi belum menyusun *progress_cycle* | `targetKaloriHariIni: null`, `isReminderActive: false`, `jadwalMingguan: []`, `streak: 0` |
 | Klien belum di-*pairing* dengan PT | `pt: null` (tanpa return object error 404), `jadwalMingguan: []` |
 | `weekly_plans` sudah di-generate AI namun PT belum mengeklik "Setuju" (*pending_review*) | `jadwalMingguan: []` (Disembunyikan demi keamanan medikasi aktivitas) |
-| Klien berolahraga namun tidak mencatat asupan makan (atau sebaliknya) | `streak` tetap bertambah/terhitung (berkat logika agregasi **OR** per tanggal) |
-| Klien belum log apa pun hari ini, tapi kemarin dan hari-hari sebelumnya konsisten | `streak` tetap tampil sesuai jumlah hari *confirmed* (tidak reset ke 0) |
+| Klien berolahraga namun tidak mencatat asupan makan (atau sebaliknya) | `streak` tetap bertambah +1 untuk hari itu (berkat logika agregasi **OR** per tanggal) |
+| Klien tidak log sehari atau beberapa hari (gap) | `streak` **beku** di angka terakhir, tidak reset ke 0 |
+| Klien mulai log lagi setelah gap | `streak` **lanjut dari angka terakhir**, bukan mulai dari 1 |
+| Klien memulai siklus baru (`POST /progress-cycles`) | `streak` siklus baru mulai dari `0` (mengulang per siklus) |
 | Batas waktu siklus terlampaui (belum *selesai*) | `isReminderActive: true` |
 
 ## Definition of Done
 
 - [ ] Endpoint `GET /klien/dashboard-summary` terimplementasi bersih di sisi Controller & Service.
-- [ ] Logika `streak` dijamin menggunakan operasi pengkondisian agregasi **OR**.
+- [ ] Logika `streak` memakai agregasi **OR** (`activity_logs` ATAU `meal_logs`), akumulatif per siklus, tidak pernah reset dalam siklus, dan tersimpan di `progress_cycles.streak`.
 - [ ] Jadwal mingguan hanya mengeluarkan array jika *status* `weekly_plans` sesuai (`disetujui` / `override`).
 - [ ] Banner reminder durasi dievaluasi murni dari perbandingan data siklus yang `aktif`.
 - [ ] `npm run lint`, `npm run typecheck`, `npm run build` lolos tanpa error.
