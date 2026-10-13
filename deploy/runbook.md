@@ -20,12 +20,18 @@ DATABASE_URL="<connection-string-aiven>" npm run db:seed
 
 ## 3. Backend — Render (Web Service, free)
 
+**Cara cepat (Blueprint)**: Render → New → **Blueprint** → pilih repo ini → Render membaca
+`render.yaml` (build/start/health check + env). Isi nilai bertanda `sync: false` di dashboard.
+
+**Cara manual**:
 1. https://render.com → connect repo GitHub backend.
 2. New → Web Service → pilih repo (Render auto-detect Node).
 3. Build Command: `npm install && npm run build`
 4. Start Command: `npm start`
 5. Set semua env dari `env.md` (termasuk `DATABASE_URL` Aiven, `NODE_ENV=production`).
 6. Deploy → dapat URL (`https://<nama>.onrender.com`).
+
+> `render.yaml` di-set ke branch `dev` (staging). Untuk production, ubah ke `main`.
 
 > Free tier "tidur" setelah ~15 menit idle; request pertama lambat (cold start ~30-60 dtk).
 
