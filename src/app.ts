@@ -17,12 +17,15 @@ import cronRoutes from "./jobs/cron.routes";
 export function createApp() {
   const app = express();
 
+  // Di belakang reverse proxy (Render) — agar IP/protokol benar & rate-limit tidak warning.
+  app.set("trust proxy", 1);
+
   app.use(helmet());
   app.use(express.json());
   app.use(cookieParser());
   app.use(
     cors({
-      origin: [env.WEB_ORIGIN],
+      origin: env.webOrigins, // daftar origin dari WEB_ORIGIN (boleh dipisah koma)
       credentials: true,
     })
   );
