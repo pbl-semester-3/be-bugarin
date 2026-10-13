@@ -16,6 +16,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
+    "db:seed-dev": "tsx db/seed-dev.ts",
     "db:backfill-streak": "tsx scripts/backfill-streak.ts",
     "db:normalize-weekly-plan": "tsx scripts/normalize-weekly-plan.ts"
   },
