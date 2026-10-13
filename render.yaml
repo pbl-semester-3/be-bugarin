@@ -14,7 +14,9 @@ services:
     plan: free
     branch: dev            # staging. Ganti ke `main` untuk service production.
     autoDeploy: true
-    buildCommand: npm install && npm run build
+    # --include=dev WAJIB: NODE_ENV=production membuat npm melewatkan devDependencies,
+    # sehingga `tsc` (TypeScript) tidak terpasang dan `npm run build` gagal.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:

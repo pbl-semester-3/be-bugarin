@@ -26,7 +26,9 @@ DATABASE_URL="<connection-string-aiven>" npm run db:seed
 **Cara manual**:
 1. https://render.com → connect repo GitHub backend.
 2. New → Web Service → pilih repo (Render auto-detect Node).
-3. Build Command: `npm install && npm run build`
+3. Build Command: `npm install --include=dev && npm run build`
+   > `--include=dev` WAJIB: karena `NODE_ENV=production`, npm melewatkan devDependencies →
+     `tsc` tidak ada → build gagal.
 4. Start Command: `npm start`
 5. Set semua env dari `env.md` (termasuk `DATABASE_URL` Aiven, `NODE_ENV=production`).
 6. Deploy → dapat URL (`https://<nama>.onrender.com`).
