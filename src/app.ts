@@ -46,3 +46,7 @@ export function createApp() {
 
   return app;
 }
+
+// Vercel (preset Express) mendeteksi file ini sebagai entry backend dan mewajibkan
+// default export berupa app/handler — tanpa ini, GET / gagal ("Invalid export").
+export default createApp();
