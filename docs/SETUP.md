@@ -46,6 +46,9 @@ Kalau dapat response `{"data":{"token":"...","role":"klien"}}` — backend bener
 
 ## Deployment Dev/Staging (gratis)
 
+> Panduan deploy yang lebih lengkap & terpelihara ada di [`deploy/`](../deploy/README.md)
+> (env, runbook, one-time scripts, checklist, rollback). Bagian di bawah ini ringkasan.
+
 Supaya tim Frontend & Mobile **tidak perlu jalanin backend/database apa pun secara lokal**:
 
 ### 1. Database — Aiven (MySQL Free Tier)
