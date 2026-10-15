@@ -101,6 +101,78 @@ export async function recalculateActiveCycleStreak(klienId: number): Promise<num
   return streak;
 }
 
+// Resolusi makanan: pakai `makananId` (master) atau `namaMakanan` (cari master,
+// lalu estimasi AI + simpan ke master bila belum ada). Dipakai bersama oleh
+// createMealLog dan estimateMakanan.
+async function resolveMakanan(data: {
+  makananId?: number;
+  namaMakanan?: string;
+}): Promise<{ makananId: number; namaMakanan: string; kaloriPer100g: number; kategori: string }> {
+  if (data.makananId) {
+    const makanan = await db.query.masterMakanan.findFirst({
+      where: eq(masterMakanan.id, data.makananId),
+    });
+    if (!makanan) throw new AppError(404, "Makanan tidak ditemukan");
+    return {
+      makananId: makanan.id,
+      namaMakanan: makanan.nama,
+      kaloriPer100g: makanan.kaloriPer100g,
+      kategori: makanan.kategori,
+    };
+  }
+
+  if (data.namaMakanan) {
+    const searchNama = data.namaMakanan;
+    const makanan = await db.query.masterMakanan.findFirst({
+      where: sql`LOWER(${masterMakanan.nama}) = LOWER(${searchNama})`,
+    });
+
+    if (makanan) {
+      return {
+        makananId: makanan.id,
+        namaMakanan: makanan.nama,
+        kaloriPer100g: makanan.kaloriPer100g,
+        kategori: makanan.kategori,
+      };
+    }
+
+    const estimated = await estimateFoodCalories(searchNama);
+    try {
+      const [insertMakanan] = await db.insert(masterMakanan).values({
+        nama: searchNama,
+        kaloriPer100g: estimated.kaloriPer100g,
+        kategori: estimated.kategori,
+        sumber: "ai_generated",
+      });
+      return {
+        makananId: insertMakanan.insertId,
+        namaMakanan: searchNama,
+        kaloriPer100g: estimated.kaloriPer100g,
+        kategori: estimated.kategori,
+      };
+    } catch (error) {
+      const err = error as { code?: string; errno?: number; cause?: { code?: string; errno?: number } };
+      const code = err.code || err.cause?.code;
+      const errno = err.errno || err.cause?.errno;
+      if (code === "ER_DUP_ENTRY" || errno === 1062) {
+        const existing = await db.query.masterMakanan.findFirst({
+          where: sql`LOWER(${masterMakanan.nama}) = LOWER(${searchNama})`,
+        });
+        if (!existing) throw new AppError(500, "Terjadi kesalahan saat memproses makanan unik");
+        return {
+          makananId: existing.id,
+          namaMakanan: existing.nama,
+          kaloriPer100g: existing.kaloriPer100g,
+          kategori: existing.kategori,
+        };
+      }
+      throw error;
+    }
+  }
+
+  throw new AppError(400, "Harus mengirim makananId atau namaMakanan");
+}
+
 export const klienService = {
   async getProfile(klienId: number) {
     const profile = await db.query.klienProfiles.findFirst({
@@ -454,60 +526,11 @@ export const klienService = {
       if (!plan) throw new AppError(404, "Weekly plan tidak ditemukan atau bukan milik Anda");
     }
 
-    let resolvedMakananId: number;
-    let resolvedNamaMakanan: string;
-    let kaloriPer100g: number;
-
-    if (data.makananId) {
-      const makanan = await db.query.masterMakanan.findFirst({
-        where: eq(masterMakanan.id, data.makananId)
-      });
-      if (!makanan) throw new AppError(404, "Makanan tidak ditemukan");
-      resolvedMakananId = makanan.id;
-      resolvedNamaMakanan = makanan.nama;
-      kaloriPer100g = makanan.kaloriPer100g;
-    } else if (data.namaMakanan) {
-      const searchNama = data.namaMakanan;
-      const makanan = await db.query.masterMakanan.findFirst({
-        where: sql`LOWER(${masterMakanan.nama}) = LOWER(${searchNama})`
-      });
-
-      if (makanan) {
-        resolvedMakananId = makanan.id;
-        resolvedNamaMakanan = makanan.nama;
-        kaloriPer100g = makanan.kaloriPer100g;
-      } else {
-        const estimated = await estimateFoodCalories(searchNama);
-        try {
-          const [insertMakanan] = await db.insert(masterMakanan).values({
-            nama: searchNama,
-            kaloriPer100g: estimated.kaloriPer100g,
-            kategori: estimated.kategori,
-            sumber: "ai_generated",
-          });
-          resolvedMakananId = insertMakanan.insertId;
-          resolvedNamaMakanan = searchNama;
-          kaloriPer100g = estimated.kaloriPer100g;
-        } catch (error) {
-          const err = error as { code?: string; errno?: number; cause?: { code?: string; errno?: number } };
-          const code = err.code || err.cause?.code;
-          const errno = err.errno || err.cause?.errno;
-          if (code === 'ER_DUP_ENTRY' || errno === 1062) {
-            const existing = await db.query.masterMakanan.findFirst({
-              where: sql`LOWER(${masterMakanan.nama}) = LOWER(${searchNama})`
-            });
-            if (!existing) throw new AppError(500, "Terjadi kesalahan saat memproses makanan unik");
-            resolvedMakananId = existing.id;
-            resolvedNamaMakanan = existing.nama;
-            kaloriPer100g = existing.kaloriPer100g;
-          } else {
-            throw error;
-          }
-        }
-      }
-    } else {
-      throw new AppError(400, "Harus mengirim makananId atau namaMakanan");
-    }
+    const {
+      makananId: resolvedMakananId,
+      namaMakanan: resolvedNamaMakanan,
+      kaloriPer100g,
+    } = await resolveMakanan(data);
 
     const kaloriMasuk = Math.round(kaloriPer100g * (data.porsiGram / 100));
     const tanggal = new Date().toISOString().slice(0, 10);
@@ -531,6 +554,18 @@ export const klienService = {
       kaloriMasuk,
       tanggal,
       weeklyPlanId: data.weeklyPlanId || null,
+    };
+  },
+
+  // Estimasi kalori makanan TANPA membuat meal log — dipakai mobile untuk
+  // menampilkan kkal per item saat klien menambah menu (staging/draft).
+  async estimateMakanan(data: { namaMakanan: string }) {
+    const resolved = await resolveMakanan({ namaMakanan: data.namaMakanan });
+    return {
+      makananId: resolved.makananId,
+      namaMakanan: resolved.namaMakanan,
+      kaloriPer100g: resolved.kaloriPer100g,
+      kategori: resolved.kategori,
     };
   },
 
