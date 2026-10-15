@@ -54,6 +54,12 @@ export const createMealLogSchema = z.object({
 export type CreateActivityLogInput = z.infer<typeof createActivityLogSchema>;
 export type CreateMealLogInput = z.infer<typeof createMealLogSchema>;
 
+export const estimateMealLogSchema = z.object({
+  namaMakanan: z.string().min(1, "Nama makanan harus diisi").max(150),
+});
+
+export type EstimateMealLogInput = z.infer<typeof estimateMealLogSchema>;
+
 export const sendPairingRequestSchema = z.object({
   ptId: z.number().int().positive("ptId harus bernilai positif"),
 });

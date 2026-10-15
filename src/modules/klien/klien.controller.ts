@@ -9,6 +9,7 @@ import {
   newCycleSchema,
   createActivityLogSchema,
   createMealLogSchema,
+  estimateMealLogSchema,
   sendPairingRequestSchema,
   replyFeedbackSchema
 } from "./klien.schema";
@@ -140,6 +141,16 @@ export const klienController = {
       const parsedData = createMealLogSchema.parse(req.body);
       const data = await klienService.createMealLog(userId, parsedData);
       res.status(201).json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async estimateMeal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsedData = estimateMealLogSchema.parse(req.body);
+      const data = await klienService.estimateMakanan(parsedData);
+      res.json({ data });
     } catch (error) {
       next(error);
     }
