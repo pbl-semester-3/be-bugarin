@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "note": "Dihasilkan otomatis dari schema Zod backend. Aturan .refine()/lintas-field tidak tercakup.",
+  "schemas": {
+    "auth.login": {
+      "emailOrUsername": {
+        "optional": false,
+        "type": "string",
+        "minLength": 1
+      },
+      "password": {
+        "optional": false,
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "pt.changePassword": {
+      "passwordBaru": {
+        "optional": false,
+        "type": "string",
+        "minLength": 8
+      },
+      "passwordSaatIni": {
+        "optional": false,
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "pt.updateProfile": {
+      "jenisKelamin": {
+        "optional": true,
+        "type": "string",
+        "enum": [
+          "pria",
+          "wanita"
+        ]
+      },
+      "nama": {
+        "optional": true,
+        "type": "string",
+        "minLength": 2
+      },
+      "spesialisasi": {
+        "optional": true,
+        "type": "string",
+        "enum": [
+          "turun_bb",
+          "naik_bb"
+        ]
+      },
+      "tempatGym": {
+        "optional": true,
+        "type": "string",
+        "minLength": 3
+      },
+      "usia": {
+        "optional": true,
+        "type": "integer",
+        "minimum": 13
+      }
+    }
+  }
+}
