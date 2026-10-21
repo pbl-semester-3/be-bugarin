@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const updateProfileSchema = z.object({
-  nama: z.string().min(1).optional(),
-  usia: z.number().int().positive().optional(),
+  nama: z.string().min(2, "Nama minimal 2 karakter").optional(),
+  usia: z.number().int().min(13, "Usia minimal 13 tahun").optional(),
   jenisKelamin: z.enum(["pria", "wanita"]).optional(),
   alergiMakanan: z.string().optional(),
   tinggiBadanCm: z.number().positive().optional(),
