@@ -9,11 +9,11 @@ export type RespondPairingRequestInput = z.infer<typeof respondPairingRequestSch
 // .strict(): field di luar daftar (mis. email/username) ditolak 400, bukan diabaikan diam-diam.
 // email/username hanya boleh diubah Admin, bukan oleh PT.
 export const updatePtProfileSchema = z.object({
-  nama: z.string().min(1, "Nama tidak boleh kosong").optional(),
-  usia: z.number().int().positive("Usia harus bilangan bulat positif").optional(),
+  nama: z.string().min(2, "Nama minimal 2 karakter").optional(),
+  usia: z.number().int().min(13, "Usia minimal 13 tahun").optional(),
   jenisKelamin: z.enum(["pria", "wanita"]).optional(),
   spesialisasi: z.enum(["turun_bb", "naik_bb"]).optional(),
-  tempatGym: z.string().min(1, "Tempat gym tidak boleh kosong").optional(),
+  tempatGym: z.string().min(3, "Tempat gym minimal 3 karakter").optional(),
 }).strict();
 
 export const changePtPasswordSchema = z.object({
