@@ -18,7 +18,8 @@
     "db:seed": "tsx db/seed.ts",
     "db:seed-dev": "tsx db/seed-dev.ts",
     "db:backfill-streak": "tsx scripts/backfill-streak.ts",
-    "db:normalize-weekly-plan": "tsx scripts/normalize-weekly-plan.ts"
+    "db:normalize-weekly-plan": "tsx scripts/normalize-weekly-plan.ts",
+    "schema:export": "tsx scripts/export-schema-contract.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -53,6 +54,7 @@
     "eslint": "^9.16.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.18.0"
+    "typescript-eslint": "^8.18.0",
+    "zod-to-json-schema": "^3.25.2"
   }
 }
