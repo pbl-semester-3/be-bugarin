@@ -49,8 +49,7 @@ export async function registerKlien(input: RegisterInput) {
   });
 }
 
-export async function login(input: LoginInput) {
-  const [user] = await db
+export async function login(input: LoginInput) {  const [user] = await db
     .select()
     .from(users)
     .where(or(eq(users.email, input.emailOrUsername), eq(users.username, input.emailOrUsername)))
@@ -65,6 +64,20 @@ export async function login(input: LoginInput) {
 
   const token = issueToken({ id: user.id, role: user.role });
   return { token, role: user.role };
+}
+
+// GET /auth/me — identitas sesi aktif (tanpa data sensitif).
+export async function getMe(userId: number) {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new AppError(404, "User tidak ditemukan");
+
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    role: user.role,
+    tema: user.tema,
+  };
 }
 
 async function generateUniqueUsername(email: string): Promise<string> {

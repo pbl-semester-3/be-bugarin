@@ -27,36 +27,19 @@
       }
     },
     "pt.updateProfile": {
-      "jenisKelamin": {
-        "optional": true,
-        "type": "string",
-        "enum": [
-          "pria",
-          "wanita"
-        ]
-      },
       "nama": {
         "optional": true,
         "type": "string",
         "minLength": 2
       },
-      "spesialisasi": {
-        "optional": true,
-        "type": "string",
-        "enum": [
-          "turun_bb",
-          "naik_bb"
-        ]
-      },
-      "tempatGym": {
-        "optional": true,
-        "type": "string",
-        "minLength": 3
-      },
       "usia": {
         "optional": true,
         "type": "integer",
         "minimum": 13
+      },
+      "whatsapp": {
+        "optional": true,
+        "type": "string"
       }
     }
   }

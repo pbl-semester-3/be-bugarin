@@ -75,6 +75,18 @@ export async function logout(req: Request, res: Response) {
   res.json({ data: "ok" });
 }
 
+// GET /auth/me — dipakai FE untuk menentukan role pada guard server-side.
+export async function me(req: Request, res: Response, next: NextFunction) {
+  try {
+    // authGuard menjamin req.user terisi & akun aktif.
+    const userId = req.user!.id;
+    const data = await authService.getMe(userId);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
   try {
     const input = forgotPasswordSchema.parse(req.body);

@@ -44,6 +44,7 @@ async function buildPtProfile(ptUserId: number) {
       jenisKelamin: profile.jenisKelamin,
       spesialisasi: profile.spesialisasi,
       tempatGym: profile.tempatGym,
+      whatsapp: profile.whatsapp,
       fotoUrl: buildCloudinaryUrl(profile.fotoPublicId),
     },
   };
@@ -95,9 +96,7 @@ export const ptService = {
     const setData: Partial<typeof ptProfiles.$inferInsert> = {};
     if (data.nama !== undefined) setData.nama = data.nama;
     if (data.usia !== undefined) setData.usia = data.usia;
-    if (data.jenisKelamin !== undefined) setData.jenisKelamin = data.jenisKelamin;
-    if (data.spesialisasi !== undefined) setData.spesialisasi = data.spesialisasi;
-    if (data.tempatGym !== undefined) setData.tempatGym = data.tempatGym;
+    if (data.whatsapp !== undefined) setData.whatsapp = data.whatsapp;
 
     if (Object.keys(setData).length > 0) {
       await db.update(ptProfiles).set(setData).where(eq(ptProfiles.id, profile.id));
