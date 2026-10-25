@@ -50,6 +50,13 @@
       "when": 1791900154126,
       "tag": "0006_heavy_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1792910718148,
+      "tag": "0007_greedy_jackpot",
+      "breakpoints": true
     }
   ]
 }

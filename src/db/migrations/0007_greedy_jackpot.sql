@@ -1,0 +1,1 @@
+ALTER TABLE `pt_profiles` ADD `whatsapp` varchar(15);
