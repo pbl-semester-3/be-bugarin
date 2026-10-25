@@ -1,7 +1,8 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { asyncHandler } from "../../middlewares/async-handler";
-import { register, login, oauthGoogle, logout, forgotPassword, resetPassword } from "./auth.controller";
+import { authGuard } from "../../middlewares/auth-guard";
+import { register, login, oauthGoogle, logout, me, forgotPassword, resetPassword } from "./auth.controller";
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.post("/register", asyncHandler(register));
 router.post("/login", asyncHandler(login));
 router.post("/oauth/google", asyncHandler(oauthGoogle));
 router.post("/logout", asyncHandler(logout));
+router.get("/me", authGuard(["klien", "pt", "admin"]), asyncHandler(me));
 router.post("/forgot-password", forgotLimiter, asyncHandler(forgotPassword));
 router.post("/reset-password", resetLimiter, asyncHandler(resetPassword));
 
