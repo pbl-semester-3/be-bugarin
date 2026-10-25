@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, isNotNull } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNotNull, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { db } from "../../config/db";
 import {
@@ -365,11 +365,151 @@ export const adminService = {
         .where(eq(pairingRequests.status, "pending")),
     ]);
 
+    // ===== Data chart dashboard: tahun berjalan, zona WIB (UTC+7) =====
+    const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const year = nowWib.getUTCFullYear();
+    const currentMonth = nowWib.getUTCMonth() + 1;
+
+    // Registrasi klien aktif per bulan (WIB) pada tahun berjalan.
+    const regRows = await db
+      .select({
+        ym: sql<string>`DATE_FORMAT(DATE_ADD(${users.createdAt}, INTERVAL 7 HOUR), '%Y-%m')`,
+        total: sql<string>`COUNT(*)`,
+      })
+      .from(users)
+      .where(
+        and(
+          eq(users.role, "klien"),
+          eq(users.isActive, true),
+          sql`YEAR(DATE_ADD(${users.createdAt}, INTERVAL 7 HOUR)) = ${year}`
+        )
+      )
+      .groupBy(
+        sql`DATE_FORMAT(DATE_ADD(${users.createdAt}, INTERVAL 7 HOUR), '%Y-%m')`
+      );
+
+    // Klien aktif yang registrasi tahun ini + profil kliennya.
+    const klienUsers = await db
+      .select({
+        userId: users.id,
+        profileId: klienProfiles.id,
+        regYm: sql<string>`DATE_FORMAT(DATE_ADD(${users.createdAt}, INTERVAL 7 HOUR), '%Y-%m')`,
+      })
+      .from(users)
+      .innerJoin(klienProfiles, eq(klienProfiles.userId, users.id))
+      .where(
+        and(
+          eq(users.role, "klien"),
+          eq(users.isActive, true),
+          sql`YEAR(DATE_ADD(${users.createdAt}, INTERVAL 7 HOUR)) = ${year}`
+        )
+      );
+
+    // Siklus pertama per klien (tanggalMulai paling awal; tie-break id terkecil).
+    const profileIds = klienUsers.map((k) => k.profileId);
+    const cycles = profileIds.length
+      ? await db
+          .select({
+            klienId: progressCycles.klienId,
+            tujuan: progressCycles.tujuan,
+            tanggalMulai: progressCycles.tanggalMulai,
+          })
+          .from(progressCycles)
+          .where(inArray(progressCycles.klienId, profileIds))
+          .orderBy(asc(progressCycles.tanggalMulai), asc(progressCycles.id))
+      : [];
+
+    const firstCycleByKlien = new Map<
+      number,
+      { tujuan: string; tanggalMulai: string }
+    >();
+    for (const cycle of cycles) {
+      if (!firstCycleByKlien.has(cycle.klienId)) {
+        firstCycleByKlien.set(cycle.klienId, {
+          tujuan: cycle.tujuan,
+          tanggalMulai: cycle.tanggalMulai,
+        });
+      }
+    }
+
+    const registeredByYm = new Map<string, number>();
+    for (const row of regRows) {
+      registeredByYm.set(row.ym, Number(row.total ?? 0));
+    }
+
+    // Subset ketat: klien yang registrasi DAN memilih tujuan di bulan yang sama.
+    const naikByYm = new Map<string, number>();
+    const turunByYm = new Map<string, number>();
+    for (const klien of klienUsers) {
+      const first = firstCycleByKlien.get(klien.profileId);
+      if (!first) continue;
+      const cycleYm = first.tanggalMulai.slice(0, 7); // "YYYY-MM"
+      if (cycleYm !== klien.regYm) continue;
+
+      if (first.tujuan === "naik_bb") {
+        naikByYm.set(klien.regYm, (naikByYm.get(klien.regYm) ?? 0) + 1);
+      } else if (first.tujuan === "turun_bb") {
+        turunByYm.set(klien.regYm, (turunByYm.get(klien.regYm) ?? 0) + 1);
+      }
+    }
+
+    // Spesialisasi PT aktif (untuk donut).
+    const specRows = await db
+      .select({
+        spesialisasi: ptProfiles.spesialisasi,
+        total: sql<string>`COUNT(*)`,
+      })
+      .from(ptProfiles)
+      .innerJoin(users, eq(ptProfiles.userId, users.id))
+      .where(and(eq(users.isActive, true), isNotNull(ptProfiles.spesialisasi)))
+      .groupBy(ptProfiles.spesialisasi);
+
+    const specCount = new Map<string, number>();
+    for (const row of specRows) {
+      if (row.spesialisasi) {
+        specCount.set(row.spesialisasi, Number(row.total ?? 0));
+      }
+    }
+
+    const MONTH_LABELS = [
+      "JAN", "FEB", "MAR", "APR", "MEI", "JUN",
+      "JUL", "AGU", "SEP", "OKT", "NOV", "DES",
+    ];
+
+    // Januari s/d bulan berjalan (tahun ini), bulan kosong = 0.
+    const activityTrend = Array.from({ length: currentMonth }, (_, i) => {
+      const month = i + 1;
+      const ym = `${year}-${String(month).padStart(2, "0")}`;
+      return {
+        month: ym,
+        label: MONTH_LABELS[i],
+        totalRegistered: registeredByYm.get(ym) ?? 0,
+        totalNaikBb: naikByYm.get(ym) ?? 0,
+        totalTurunBb: turunByYm.get(ym) ?? 0,
+        active: month === currentMonth,
+      };
+    });
+
+    const specialization = [
+      {
+        key: "turun_bb" as const,
+        label: "Turun BB",
+        count: specCount.get("turun_bb") ?? 0,
+      },
+      {
+        key: "naik_bb" as const,
+        label: "Naik BB",
+        count: specCount.get("naik_bb") ?? 0,
+      },
+    ];
+
     return {
       totalKlien: Number(klienRows[0]?.total ?? 0),
       totalPt: Number(ptRows[0]?.total ?? 0),
       totalPairingAktif: Number(pairingRows[0]?.total ?? 0),
       totalRequestPending: Number(pendingRows[0]?.total ?? 0),
+      activityTrend,
+      specialization,
     };
   },
 
