@@ -47,7 +47,7 @@ async function buildUserItem(userId: number) {
       isActive: u.isActive,
       klienProfile: null,
       ptProfile: p
-        ? { nama: p.nama, usia: p.usia, jenisKelamin: p.jenisKelamin, spesialisasi: p.spesialisasi, tempatGym: p.tempatGym }
+        ? { nama: p.nama, usia: p.usia, jenisKelamin: p.jenisKelamin, spesialisasi: p.spesialisasi, tempatGym: p.tempatGym, whatsapp: p.whatsapp }
         : null,
     };
   }
@@ -203,6 +203,7 @@ export const adminService = {
           jenisKelamin: p.jenisKelamin,
           spesialisasi: p.spesialisasi,
           tempatGym: p.tempatGym,
+          whatsapp: p.whatsapp,
         },
       })),
     };
@@ -220,7 +221,15 @@ export const adminService = {
           isActive: true,
         });
         const newUserId = inserted.insertId;
-        await tx.insert(ptProfiles).values({ userId: newUserId, nama: data.nama });
+        await tx.insert(ptProfiles).values({
+          userId: newUserId,
+          nama: data.nama,
+          usia: data.usia ?? null,
+          jenisKelamin: data.jenisKelamin ?? null,
+          whatsapp: data.whatsapp ?? null,
+          tempatGym: data.tempatGym ?? null,
+          spesialisasi: data.spesialisasi ?? null,
+        });
         await tx.insert(adminActivityLogs).values({
           adminId,
           aksi: `Admin membuat akun PT: ${data.nama}`,
@@ -234,7 +243,14 @@ export const adminService = {
         email: data.email,
         username: data.username,
         role: "pt" as const,
-        ptProfile: { nama: data.nama },
+        ptProfile: {
+          nama: data.nama,
+          usia: data.usia ?? null,
+          jenisKelamin: data.jenisKelamin ?? null,
+          whatsapp: data.whatsapp ?? null,
+          tempatGym: data.tempatGym ?? null,
+          spesialisasi: data.spesialisasi ?? null,
+        },
       };
     } catch (error) {
       throw asDuplicateError(error);
@@ -252,17 +268,26 @@ export const adminService = {
     if (data.username !== undefined) userSet.username = data.username;
     if (data.password !== undefined) userSet.passwordHash = await argon2.hash(data.password);
 
+    // Field profil khusus PT (diabaikan bila target klien).
+    const profileSet: Partial<typeof ptProfiles.$inferInsert> = {};
+    if (data.nama !== undefined) profileSet.nama = data.nama;
+    if (data.usia !== undefined) profileSet.usia = data.usia;
+    if (data.jenisKelamin !== undefined) profileSet.jenisKelamin = data.jenisKelamin;
+    if (data.whatsapp !== undefined) profileSet.whatsapp = data.whatsapp;
+    if (data.tempatGym !== undefined) profileSet.tempatGym = data.tempatGym;
+    if (data.spesialisasi !== undefined) profileSet.spesialisasi = data.spesialisasi;
+
     try {
       await db.transaction(async (tx) => {
         if (Object.keys(userSet).length > 0) {
           await tx.update(users).set(userSet).where(eq(users.id, targetId));
         }
-        if (data.nama !== undefined) {
-          if (target.role === "pt") {
-            await tx.update(ptProfiles).set({ nama: data.nama }).where(eq(ptProfiles.userId, targetId));
-          } else {
-            await tx.update(klienProfiles).set({ nama: data.nama }).where(eq(klienProfiles.userId, targetId));
+        if (target.role === "pt") {
+          if (Object.keys(profileSet).length > 0) {
+            await tx.update(ptProfiles).set(profileSet).where(eq(ptProfiles.userId, targetId));
           }
+        } else if (data.nama !== undefined) {
+          await tx.update(klienProfiles).set({ nama: data.nama }).where(eq(klienProfiles.userId, targetId));
         }
         await tx.insert(adminActivityLogs).values({
           adminId,
