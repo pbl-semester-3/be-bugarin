@@ -75,7 +75,7 @@ async function runTests() {
       const body = await res.json();
       console.log(`GET raw: [${res.status}] ${JSON.stringify(body)}`);
       check("GET profil 200 + struktur user/profile", res.status === 200 && body.data.user.id === pt.userId && body.data.profile.nama === "PT profil", body);
-      check("GET profil field nullable tampil null", body.data.profile.usia === null && body.data.profile.spesialisasi === null && body.data.profile.tempatGym === null, body);
+      check("GET profil field nullable tampil null", body.data.profile.usia === null && body.data.profile.spesialisasi === null && body.data.profile.tempatGym === null && body.data.profile.whatsapp === null, body);
       check("GET profil user.email ada", typeof body.data.user.email === "string", body);
     }
 
@@ -83,12 +83,12 @@ async function runTests() {
     {
       const res = await fetch(`${baseUrl}/pt/profile`, {
         method: "PUT", headers: pt.auth,
-        body: JSON.stringify({ tempatGym: "Gym Baru", spesialisasi: "turun_bb" }),
+        body: JSON.stringify({ nama: "PT profil baru", usia: 30, whatsapp: "+6281234567890" }),
       });
       const body = await res.json();
       console.log(`PUT partial raw: [${res.status}] ${JSON.stringify(body)}`);
-      check("PUT partial ubah tempatGym & spesialisasi", res.status === 200 && body.data.profile.tempatGym === "Gym Baru" && body.data.profile.spesialisasi === "turun_bb", body);
-      check("PUT partial tidak menyentuh field lain", body.data.profile.nama === "PT profil" && body.data.profile.usia === null, body);
+      check("PUT partial ubah nama/usia/whatsapp", res.status === 200 && body.data.profile.nama === "PT profil baru" && body.data.profile.usia === 30 && body.data.profile.whatsapp === "+6281234567890", body);
+      check("PUT partial tidak menyentuh field terkunci", body.data.profile.tempatGym === null && body.data.profile.spesialisasi === null, body);
 
       const userDb = await db.query.users.findFirst({ where: eq(users.id, pt.userId) });
       check("PUT profile tidak mengubah users", userDb!.email === body.data.user.email, { email: userDb!.email });
@@ -99,7 +99,7 @@ async function runTests() {
       const res = await fetch(`${baseUrl}/pt/profile`, { method: "PUT", headers: pt.auth, body: JSON.stringify({}) });
       const body = await res.json();
       console.log(`PUT kosong raw: [${res.status}] ${JSON.stringify(body)}`);
-      check("PUT body kosong 200 tanpa perubahan", res.status === 200 && body.data.profile.tempatGym === "Gym Baru", body);
+      check("PUT body kosong 200 tanpa perubahan", res.status === 200 && body.data.profile.nama === "PT profil baru", body);
     }
 
     console.log("\n=== TES PUT /pt/profile field terlarang (.strict) ===");
@@ -114,6 +114,20 @@ async function runTests() {
 
       const userDb = await db.query.users.findFirst({ where: eq(users.id, pt.userId) });
       check("email/username users tidak berubah", userDb!.email !== "hacker@x.com" && userDb!.username !== "hacker", userDb);
+    }
+
+    console.log("\n=== TES PUT /pt/profile field terkunci (read-only) ===");
+    {
+      const res = await fetch(`${baseUrl}/pt/profile`, {
+        method: "PUT", headers: pt.auth,
+        body: JSON.stringify({ jenisKelamin: "pria", tempatGym: "Gym Baru", spesialisasi: "turun_bb" }),
+      });
+      const body = await res.json();
+      console.log(`PUT field terkunci raw: [${res.status}] ${JSON.stringify(body)}`);
+      check("kirim jenisKelamin/tempatGym/spesialisasi -> 400", res.status === 400, body);
+
+      const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, pt.userId) });
+      check("field terkunci tidak berubah", p!.jenisKelamin === null && p!.tempatGym === null && p!.spesialisasi === null, p);
     }
 
     console.log("\n=== TES PUT /pt/password ===");

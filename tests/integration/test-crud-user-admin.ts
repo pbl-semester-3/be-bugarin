@@ -122,7 +122,11 @@ async function runTests() {
       const email = `${uniq("newpt")}@test.com`;
       const res = await fetch(`${baseUrl}/admin/users/pt`, {
         method: "POST", headers: admin.auth,
-        body: JSON.stringify({ nama: "PT Baru", email, username: uniq("newptuser"), password: "password123" }),
+        body: JSON.stringify({
+          nama: "PT Baru", email, username: uniq("newptuser"), password: "password123",
+          usia: 30, jenisKelamin: "pria", whatsapp: "+6281234567890",
+          tempatGym: "Gym Baru", spesialisasi: "turun_bb",
+        }),
       });
       const body = await res.json();
       console.log(`create pt raw: [${res.status}] ${JSON.stringify(body)}`);
@@ -131,6 +135,11 @@ async function runTests() {
 
       const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, createdPtUserId) });
       check("pt_profiles dibuat", p?.nama === "PT Baru", p?.nama);
+      check(
+        "pt_profiles field lengkap tersimpan",
+        p?.usia === 30 && p?.jenisKelamin === "pria" && p?.whatsapp === "+6281234567890" && p?.tempatGym === "Gym Baru" && p?.spesialisasi === "turun_bb",
+        p
+      );
 
       const login = await fetch(`${baseUrl}/auth/login`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -172,6 +181,36 @@ async function runTests() {
       });
       console.log(`edit target admin raw: [${targetAdmin.status}] ${await targetAdmin.text()}`);
       check("target admin -> 404", targetAdmin.status === 404, targetAdmin.status);
+    }
+
+    console.log("\n=== TES PUT /admin/users/:id (field profil PT) ===");
+    {
+      const pt = await createPt("editpt");
+      const res = await fetch(`${baseUrl}/admin/users/${pt.userId}`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({
+          usia: 41, jenisKelamin: "wanita", whatsapp: "+628111222333",
+          tempatGym: "Gym Admin", spesialisasi: "naik_bb",
+        }),
+      });
+      const body = await res.json();
+      console.log(`edit profil PT raw: [${res.status}] ${JSON.stringify(body)}`);
+      check(
+        "admin bisa ubah field profil PT",
+        res.status === 200 && body.data.ptProfile.usia === 41 && body.data.ptProfile.jenisKelamin === "wanita" && body.data.ptProfile.whatsapp === "+628111222333" && body.data.ptProfile.tempatGym === "Gym Admin" && body.data.ptProfile.spesialisasi === "naik_bb",
+        body
+      );
+
+      const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, pt.userId) });
+      check("DB pt_profiles terupdate oleh admin", p?.tempatGym === "Gym Admin" && p?.jenisKelamin === "wanita" && p?.whatsapp === "+628111222333", p);
+
+      // Field PT-spesifik untuk target klien diabaikan (tidak error).
+      const k = await createKlien("ignorept");
+      const resK = await fetch(`${baseUrl}/admin/users/${k.userId}`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({ nama: "Klien Ubah", tempatGym: "Gym X", jenisKelamin: "pria" }),
+      });
+      check("field PT untuk klien diabaikan (200)", resK.status === 200, resK.status);
     }
 
     console.log("\n=== TES DELETE PT (soft) + koordinasi ===");

@@ -6,14 +6,17 @@ export const respondPairingRequestSchema = z.object({
 
 export type RespondPairingRequestInput = z.infer<typeof respondPairingRequestSchema>;
 
-// .strict(): field di luar daftar (mis. email/username) ditolak 400, bukan diabaikan diam-diam.
-// email/username hanya boleh diubah Admin, bukan oleh PT.
+// .strict(): field di luar daftar ditolak 400, bukan diabaikan diam-diam.
+// Yang hanya boleh diubah Admin (read-only bagi PT): email, username,
+// jenisKelamin, spesialisasi, tempatGym. PT hanya boleh ubah nama, usia, whatsapp.
 export const updatePtProfileSchema = z.object({
   nama: z.string().min(2, "Nama minimal 2 karakter").optional(),
   usia: z.number().int().min(13, "Usia minimal 13 tahun").optional(),
-  jenisKelamin: z.enum(["pria", "wanita"]).optional(),
-  spesialisasi: z.enum(["turun_bb", "naik_bb"]).optional(),
-  tempatGym: z.string().min(3, "Tempat gym minimal 3 karakter").optional(),
+  whatsapp: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9]{8,14}$/, "Format WhatsApp hanya '+' dan angka")
+    .optional(),
 }).strict();
 
 export const changePtPasswordSchema = z.object({
