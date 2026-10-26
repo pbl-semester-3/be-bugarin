@@ -114,6 +114,12 @@ async function runTests() {
       const itemP = bP.data.find((x: any) => x.id === ptA.userId);
       console.log(`role=pt raw: [${resP.status}] total=${bP.data.length}`);
       check("pt: ptProfile terisi, klienProfile null", itemP && itemP.ptProfile !== null && itemP.klienProfile === null, itemP);
+      check(
+        "pt: trainerId PT-BGR-xxxx & createdAt ada",
+        typeof itemP?.trainerId === "string" && /^PT-BGR-\d{4,}$/.test(itemP.trainerId) && typeof itemP?.createdAt === "string",
+        itemP
+      );
+      check("pt: fotoUrl key ada (null tanpa foto)", itemP?.ptProfile && "fotoUrl" in itemP.ptProfile, itemP?.ptProfile);
     }
 
     console.log("\n=== TES POST /admin/users/pt ===");
@@ -213,6 +219,47 @@ async function runTests() {
       check("field PT untuk klien diabaikan (200)", resK.status === 200, resK.status);
     }
 
+    console.log("\n=== TES suspend/unsuspend PT ===");
+    {
+      const pt = await createPt("suspendpt");
+
+      const off = await fetch(`${baseUrl}/admin/users/${pt.userId}`, {
+        method: "PUT", headers: admin.auth, body: JSON.stringify({ isActive: false }),
+      });
+      const offBody = await off.json();
+      console.log(`suspend pt raw: [${off.status}] ${JSON.stringify(offBody)}`);
+      check("suspend -> 200 isActive false", off.status === 200 && offBody.data.isActive === false, offBody);
+
+      const u = await db.query.users.findFirst({ where: eq(users.id, pt.userId) });
+      check("suspend tidak mengisi deleted_at", u!.deletedAt === null, u!.deletedAt);
+      const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, pt.userId) });
+      check("suspend tidak menghapus profil PT", p !== undefined, p);
+
+      const list = await fetch(`${baseUrl}/admin/users?role=pt`, { headers: admin.auth });
+      const lb = await list.json();
+      const item = lb.data.find((x: any) => x.id === pt.userId);
+      check("PT suspended tetap tampil di list (nonaktif)", item && item.isActive === false, item);
+
+      const loginOff = await fetch(`${baseUrl}/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrUsername: u!.email, password: "password123" }),
+      });
+      check("login PT suspended -> 403", loginOff.status === 403, loginOff.status);
+
+      const on = await fetch(`${baseUrl}/admin/users/${pt.userId}`, {
+        method: "PUT", headers: admin.auth, body: JSON.stringify({ isActive: true }),
+      });
+      const onBody = await on.json();
+      console.log(`unsuspend pt raw: [${on.status}] ${JSON.stringify(onBody)}`);
+      check("unsuspend -> 200 isActive true", on.status === 200 && onBody.data.isActive === true, onBody);
+
+      const loginOn = await fetch(`${baseUrl}/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrUsername: u!.email, password: "password123" }),
+      });
+      check("login PT aktif kembali -> 200", loginOn.status === 200, loginOn.status);
+    }
+
     console.log("\n=== TES DELETE PT (soft) + koordinasi ===");
     {
       const pt = await createPt("delpt");
@@ -229,6 +276,19 @@ async function runTests() {
 
       const u = await db.query.users.findFirst({ where: eq(users.id, pt.userId) });
       check("DB PT is_active false", u!.isActive === false, u!.isActive);
+      check("DB PT deleted_at terisi", u!.deletedAt !== null, u!.deletedAt);
+
+      const listAfter = await fetch(`${baseUrl}/admin/users?role=pt`, { headers: admin.auth });
+      const lbAfter = await listAfter.json();
+      check("PT terhapus tidak tampil di list", !lbAfter.data.some((x: any) => x.id === pt.userId), lbAfter.data.length);
+
+      const delAgain = await fetch(`${baseUrl}/admin/users/${pt.userId}`, { method: "DELETE", headers: admin.auth });
+      check("hapus ulang PT terhapus -> 404", delAgain.status === 404, delAgain.status);
+
+      const editDeleted = await fetch(`${baseUrl}/admin/users/${pt.userId}`, {
+        method: "PUT", headers: admin.auth, body: JSON.stringify({ nama: "X" }),
+      });
+      check("edit PT terhapus -> 404", editDeleted.status === 404, editDeleted.status);
 
       const kAfter = await db.query.klienProfiles.findFirst({ where: eq(klienProfiles.id, klienOfPt.profileId) });
       check("klien PT dilepas (pt_id null)", kAfter!.ptId === null, kAfter!.ptId);
@@ -260,6 +320,11 @@ async function runTests() {
 
       const u = await db.query.users.findFirst({ where: eq(users.id, k.userId) });
       check("DB klien is_active false", u!.isActive === false, u!.isActive);
+      check("DB klien deleted_at terisi", u!.deletedAt !== null, u!.deletedAt);
+
+      const listAfter = await fetch(`${baseUrl}/admin/users?role=klien`, { headers: admin.auth });
+      const lbAfter = await listAfter.json();
+      check("klien terhapus tidak tampil di list", !lbAfter.data.some((x: any) => x.id === k.userId), lbAfter.data.length);
 
       const cycles = await db.query.progressCycles.findMany({ where: eq(progressCycles.klienId, k.profileId) });
       check("data progres klien TETAP ada (soft-delete)", cycles.length === 1, cycles.length);
