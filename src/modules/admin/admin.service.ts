@@ -12,6 +12,7 @@ import {
   feedbacks,
 } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
+import { buildCloudinaryUrl } from "../../config/cloudinary";
 import * as argon2 from "argon2";
 import type {
   UpdateAdminProfileInput,
@@ -32,6 +33,11 @@ function asDuplicateError(error: unknown): unknown {
   return error;
 }
 
+// ID tampilan PT (bukan kredensial login), stabil dari users.id.
+function formatTrainerId(userId: number) {
+  return `PT-BGR-${String(userId).padStart(4, "0")}`;
+}
+
 // Item user untuk response CRUD (bentuk sama dengan list).
 async function buildUserItem(userId: number) {
   const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
@@ -45,9 +51,11 @@ async function buildUserItem(userId: number) {
       username: u.username,
       role: u.role,
       isActive: u.isActive,
+      createdAt: u.createdAt,
+      trainerId: formatTrainerId(u.id),
       klienProfile: null,
       ptProfile: p
-        ? { nama: p.nama, usia: p.usia, jenisKelamin: p.jenisKelamin, spesialisasi: p.spesialisasi, tempatGym: p.tempatGym, whatsapp: p.whatsapp }
+        ? { nama: p.nama, usia: p.usia, jenisKelamin: p.jenisKelamin, spesialisasi: p.spesialisasi, tempatGym: p.tempatGym, whatsapp: p.whatsapp, fotoUrl: buildCloudinaryUrl(p.fotoPublicId) }
         : null,
     };
   }
@@ -165,23 +173,25 @@ export const adminService = {
         orderBy: [asc(klienProfiles.id)],
       });
       return {
-        data: rows.map((k) => ({
-          id: k.user.id,
-          email: k.user.email,
-          username: k.user.username,
-          role: k.user.role,
-          isActive: k.user.isActive,
-          klienProfile: {
-            nama: k.nama,
-            usia: k.usia,
-            jenisKelamin: k.jenisKelamin,
-            tinggiBadanCm: k.tinggiBadanCm,
-            alergiMakanan: k.alergiMakanan,
-            ptId: k.ptId,
-            tujuan: k.progressCycles.length > 0 ? k.progressCycles[0].tujuan : null,
-          },
-          ptProfile: null,
-        })),
+        data: rows
+          .filter((k) => k.user.deletedAt == null)
+          .map((k) => ({
+            id: k.user.id,
+            email: k.user.email,
+            username: k.user.username,
+            role: k.user.role,
+            isActive: k.user.isActive,
+            klienProfile: {
+              nama: k.nama,
+              usia: k.usia,
+              jenisKelamin: k.jenisKelamin,
+              tinggiBadanCm: k.tinggiBadanCm,
+              alergiMakanan: k.alergiMakanan,
+              ptId: k.ptId,
+              tujuan: k.progressCycles.length > 0 ? k.progressCycles[0].tujuan : null,
+            },
+            ptProfile: null,
+          })),
       };
     }
 
@@ -190,22 +200,27 @@ export const adminService = {
       orderBy: [asc(ptProfiles.id)],
     });
     return {
-      data: rows.map((p) => ({
-        id: p.user.id,
-        email: p.user.email,
-        username: p.user.username,
-        role: p.user.role,
-        isActive: p.user.isActive,
-        klienProfile: null,
-        ptProfile: {
-          nama: p.nama,
-          usia: p.usia,
-          jenisKelamin: p.jenisKelamin,
-          spesialisasi: p.spesialisasi,
-          tempatGym: p.tempatGym,
-          whatsapp: p.whatsapp,
-        },
-      })),
+      data: rows
+        .filter((p) => p.user.deletedAt == null)
+        .map((p) => ({
+          id: p.user.id,
+          email: p.user.email,
+          username: p.user.username,
+          role: p.user.role,
+          isActive: p.user.isActive,
+          createdAt: p.user.createdAt,
+          trainerId: formatTrainerId(p.user.id),
+          klienProfile: null,
+          ptProfile: {
+            nama: p.nama,
+            usia: p.usia,
+            jenisKelamin: p.jenisKelamin,
+            spesialisasi: p.spesialisasi,
+            tempatGym: p.tempatGym,
+            whatsapp: p.whatsapp,
+            fotoUrl: buildCloudinaryUrl(p.fotoPublicId),
+          },
+        })),
     };
   },
 
@@ -259,7 +274,7 @@ export const adminService = {
 
   async updateUser(adminId: number, targetId: number, data: UpdateUserInput) {
     const target = await db.query.users.findFirst({ where: eq(users.id, targetId) });
-    if (!target || target.role === "admin") {
+    if (!target || target.role === "admin" || target.deletedAt) {
       throw new AppError(404, "User tidak ditemukan");
     }
 
@@ -267,6 +282,10 @@ export const adminService = {
     if (data.email !== undefined) userSet.email = data.email;
     if (data.username !== undefined) userSet.username = data.username;
     if (data.password !== undefined) userSet.passwordHash = await argon2.hash(data.password);
+    // Suspend/aktifkan kembali — hanya untuk PT.
+    if (data.isActive !== undefined && target.role === "pt") {
+      userSet.isActive = data.isActive;
+    }
 
     // Field profil khusus PT (diabaikan bila target klien).
     const profileSet: Partial<typeof ptProfiles.$inferInsert> = {};
@@ -291,7 +310,10 @@ export const adminService = {
         }
         await tx.insert(adminActivityLogs).values({
           adminId,
-          aksi: `Admin mengubah user: ${data.nama ?? target.email}`,
+          aksi:
+            data.isActive !== undefined && target.role === "pt"
+              ? `Admin ${data.isActive ? "mengaktifkan" : "menonaktifkan"} user: ${data.nama ?? target.email}`
+              : `Admin mengubah user: ${data.nama ?? target.email}`,
           targetUserId: targetId,
         });
       });
@@ -304,13 +326,16 @@ export const adminService = {
 
   async deleteUser(adminId: number, targetId: number) {
     const target = await db.query.users.findFirst({ where: eq(users.id, targetId) });
-    if (!target || target.role === "admin") {
+    if (!target || target.role === "admin" || target.deletedAt) {
       throw new AppError(404, "User tidak ditemukan");
     }
 
     let nama = target.email;
     await db.transaction(async (tx) => {
-      await tx.update(users).set({ isActive: false }).where(eq(users.id, targetId));
+      await tx
+        .update(users)
+        .set({ isActive: false, deletedAt: new Date() })
+        .where(eq(users.id, targetId));
 
       if (target.role === "pt") {
         const [p] = await tx.select().from(ptProfiles).where(eq(ptProfiles.userId, targetId)).limit(1);
@@ -334,7 +359,7 @@ export const adminService = {
 
       await tx.insert(adminActivityLogs).values({
         adminId,
-        aksi: `Admin menonaktifkan user: ${nama}`,
+        aksi: `Admin menghapus user: ${nama}`,
         targetUserId: targetId,
       });
     });
