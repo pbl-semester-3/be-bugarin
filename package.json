@@ -17,6 +17,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
     "db:seed-dev": "tsx db/seed-dev.ts",
+    "db:seed-demo": "tsx db/seed-demo.ts",
+    "db:clean-demo": "tsx db/clean-demo.ts",
     "db:backfill-streak": "tsx scripts/backfill-streak.ts",
     "db:normalize-weekly-plan": "tsx scripts/normalize-weekly-plan.ts",
     "schema:export": "tsx scripts/export-schema-contract.ts"
