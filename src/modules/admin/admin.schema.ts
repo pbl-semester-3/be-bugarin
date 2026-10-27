@@ -43,13 +43,12 @@ const ptProfileFields = {
 export const createPtSchema = z.object({
   nama: z.string().min(1, "Nama tidak boleh kosong"),
   email: z.string().email("Format email tidak valid"),
-  username: z.string().min(3, "Username minimal 3 karakter").max(50),
   password: z.string().min(8, "Password minimal 8 karakter"),
   ...ptProfileFields,
 });
 
 // password? = password baru (opsional); hanya klien/PT yang boleh jadi target.
-// Field profil PT hanya diterapkan bila target role = "pt" (diabaikan untuk klien).
+// username PT immutable (ditolak di service), field profil PT hanya untuk role pt.
 export const updateUserSchema = z.object({
   nama: z.string().min(1, "Nama tidak boleh kosong").optional(),
   email: z.string().email("Format email tidak valid").optional(),

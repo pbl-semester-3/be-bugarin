@@ -7,12 +7,14 @@ import {
   klienProfiles,
   ptProfiles,
   progressCycles,
+  weightLogs,
   pairingRequests,
   adminActivityLogs,
   feedbacks,
 } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { buildCloudinaryUrl } from "../../config/cloudinary";
+import { generateUniqueUsername } from "../../utils/username";
 import * as argon2 from "argon2";
 import type {
   UpdateAdminProfileInput,
@@ -36,6 +38,20 @@ function asDuplicateError(error: unknown): unknown {
 // ID tampilan PT (bukan kredensial login), stabil dari users.id.
 function formatTrainerId(userId: number) {
   return `PT-BGR-${String(userId).padStart(4, "0")}`;
+}
+
+// Formula sama dengan progress bar profil klien mobile:
+// bbAwal -> bbSekarang (fallback bbAwal) -> bbTujuan, clamp 0..100%.
+function calculateWeightProgress(
+  cycle: { bbAwalKg: number; bbTujuanKg: number } | null | undefined,
+  latestKg: number | undefined,
+) {
+  if (!cycle) return 0;
+  const sekarang = latestKg ?? cycle.bbAwalKg;
+  const jarak = cycle.bbTujuanKg - cycle.bbAwalKg;
+  if (jarak === 0) return 0;
+  const rasio = Math.min(1, Math.max(0, (sekarang - cycle.bbAwalKg) / jarak));
+  return Math.round(rasio * 100);
 }
 
 // Item user untuk response CRUD (bentuk sama dengan list).
@@ -168,14 +184,43 @@ export const adminService = {
       const rows = await db.query.klienProfiles.findMany({
         with: {
           user: true,
-          progressCycles: { where: eq(progressCycles.status, "aktif"), limit: 1 },
+          pt: true,
+          progressCycles: {
+            where: eq(progressCycles.status, "aktif"),
+            orderBy: [desc(progressCycles.tanggalMulai)],
+            limit: 1,
+          },
         },
         orderBy: [asc(klienProfiles.id)],
       });
+
+      // Klien nonaktif/terhapus tidak ditampilkan di daftar admin.
+      const activeRows = rows.filter(
+        (k) => k.user.deletedAt == null && k.user.isActive,
+      );
+
+      const profileIds = activeRows.map((k) => k.id);
+      const latestWeightByKlien = new Map<number, number>();
+      if (profileIds.length > 0) {
+        const weightRows = await db
+          .select({
+            klienId: weightLogs.klienId,
+            beratBadanKg: weightLogs.beratBadanKg,
+          })
+          .from(weightLogs)
+          .where(inArray(weightLogs.klienId, profileIds))
+          .orderBy(desc(weightLogs.tanggal), desc(weightLogs.id));
+        for (const row of weightRows) {
+          if (!latestWeightByKlien.has(row.klienId)) {
+            latestWeightByKlien.set(row.klienId, row.beratBadanKg);
+          }
+        }
+      }
+
       return {
-        data: rows
-          .filter((k) => k.user.deletedAt == null)
-          .map((k) => ({
+        data: activeRows.map((k) => {
+          const cycle = k.progressCycles[0] ?? null;
+          return {
             id: k.user.id,
             email: k.user.email,
             username: k.user.username,
@@ -188,10 +233,17 @@ export const adminService = {
               tinggiBadanCm: k.tinggiBadanCm,
               alergiMakanan: k.alergiMakanan,
               ptId: k.ptId,
-              tujuan: k.progressCycles.length > 0 ? k.progressCycles[0].tujuan : null,
+              ptNama: k.pt?.nama ?? null,
+              tujuan: cycle?.tujuan ?? null,
+              progress: calculateWeightProgress(
+                cycle,
+                latestWeightByKlien.get(k.id),
+              ),
+              fotoUrl: buildCloudinaryUrl(k.fotoPublicId),
             },
             ptProfile: null,
-          })),
+          };
+        }),
       };
     }
 
@@ -226,11 +278,12 @@ export const adminService = {
 
   async createPt(adminId: number, data: CreatePtInput) {
     const passwordHash = await argon2.hash(data.password);
+    const username = await generateUniqueUsername(data.email);
     try {
       const userId = await db.transaction(async (tx) => {
         const [inserted] = await tx.insert(users).values({
           email: data.email,
-          username: data.username,
+          username,
           passwordHash,
           role: "pt",
           isActive: true,
@@ -256,7 +309,7 @@ export const adminService = {
       return {
         id: userId,
         email: data.email,
-        username: data.username,
+        username,
         role: "pt" as const,
         ptProfile: {
           nama: data.nama,
@@ -280,7 +333,13 @@ export const adminService = {
 
     const userSet: Partial<typeof users.$inferInsert> = {};
     if (data.email !== undefined) userSet.email = data.email;
-    if (data.username !== undefined) userSet.username = data.username;
+    if (data.username !== undefined) {
+      // Username PT adalah identitas permanen (auto-generate saat dibuat).
+      if (target.role === "pt") {
+        throw new AppError(400, "Username PT tidak dapat diubah");
+      }
+      userSet.username = data.username;
+    }
     if (data.password !== undefined) userSet.passwordHash = await argon2.hash(data.password);
     // Suspend/aktifkan kembali — hanya untuk PT.
     if (data.isActive !== undefined && target.role === "pt") {
