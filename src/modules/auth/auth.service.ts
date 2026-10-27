@@ -8,6 +8,7 @@ import { users, klienProfiles, passwordResetTokens } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { googleAuth } from "./google";
 import { sendPasswordResetEmail } from "./mailer";
+import { generateUniqueUsername } from "../../utils/username";
 import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "./auth.schema";
 
 type Role = "klien" | "pt" | "admin";
@@ -78,18 +79,6 @@ export async function getMe(userId: number) {
     role: user.role,
     tema: user.tema,
   };
-}
-
-async function generateUniqueUsername(email: string): Promise<string> {
-  const base =
-    (email.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 20) || "user";
-
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}${randomInt(1000, 9999)}`;
-    const existing = await db.query.users.findFirst({ where: eq(users.username, candidate) });
-    if (!existing) return candidate;
-  }
-  return `${base}${Date.now().toString().slice(-6)}`;
 }
 
 // OAuth Google: hanya untuk klien. Akun Google-only (password acak dormant, tak diketahui siapa pun).

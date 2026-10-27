@@ -13,6 +13,7 @@ import {
   klienProfiles,
   ptProfiles,
   progressCycles,
+  weightLogs,
   pairingRequests,
 } from "../../src/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -67,6 +68,10 @@ async function createKlien(label: string, opts?: { ptId?: number; withCycle?: bo
       klienId: profileId, bbAwalKg: 80, bbTujuanKg: 70, tujuan: "turun_bb", durasiHari: 30,
       targetKaloriPerHari: 1800, status: "aktif", tanggalMulai: "2026-09-01",
     });
+    await db.insert(weightLogs).values([
+      { klienId: profileId, beratBadanKg: 80, tanggal: "2026-09-01" },
+      { klienId: profileId, beratBadanKg: 78, tanggal: "2026-09-02" },
+    ]);
   }
   return { userId, profileId, auth: sign(userId, "klien") };
 }
@@ -100,14 +105,33 @@ async function runTests() {
 
       const klienA = await createKlien("listA", { withCycle: true });
       const ptA = await createPt("listA");
+      await db.update(klienProfiles).set({ ptId: ptA.profileId }).where(eq(klienProfiles.id, klienA.profileId));
+
+      const klienOnboarding = await createKlien("onboardingA");
+      const klienInactive = await createKlien("listInactive");
+      await db.update(users).set({ isActive: false }).where(eq(users.id, klienInactive.userId));
 
       const resK = await fetch(`${baseUrl}/admin/users?role=klien`, { headers: admin.auth });
       const bK = await resK.json();
       const itemK = bK.data.find((x: any) => x.id === klienA.userId);
+      const itemO = bK.data.find((x: any) => x.id === klienOnboarding.userId);
       console.log(`role=klien raw: [${resK.status}] total=${bK.data.length}`);
       check("klien: klienProfile terisi, ptProfile null", itemK && itemK.klienProfile !== null && itemK.ptProfile === null, itemK);
       check("klien: tujuan dari siklus aktif", itemK?.klienProfile?.tujuan === "turun_bb", itemK?.klienProfile);
       check("klien: isActive true", itemK?.isActive === true, itemK);
+      check("klien: progress bb 80->70 dgn log 78 = 20", itemK?.klienProfile?.progress === 20, itemK?.klienProfile);
+      check("klien: ptNama terisi setelah pairing", itemK?.klienProfile?.ptNama === "PT listA", itemK?.klienProfile);
+      check("klien: fotoUrl key ada", itemK?.klienProfile && "fotoUrl" in itemK.klienProfile, itemK?.klienProfile);
+      check(
+        "klien onboarding: tanpa PT, progress 0",
+        itemO?.klienProfile?.ptId === null && itemO?.klienProfile?.ptNama === null && itemO?.klienProfile?.progress === 0,
+        itemO?.klienProfile
+      );
+      check(
+        "klien nonaktif tidak tampil di list",
+        !bK.data.some((x: any) => x.id === klienInactive.userId),
+        bK.data.length
+      );
 
       const resP = await fetch(`${baseUrl}/admin/users?role=pt`, { headers: admin.auth });
       const bP = await resP.json();
@@ -129,7 +153,7 @@ async function runTests() {
       const res = await fetch(`${baseUrl}/admin/users/pt`, {
         method: "POST", headers: admin.auth,
         body: JSON.stringify({
-          nama: "PT Baru", email, username: uniq("newptuser"), password: "password123",
+          nama: "PT Baru", email, password: "password123",
           usia: 30, jenisKelamin: "pria", whatsapp: "+6281234567890",
           tempatGym: "Gym Baru", spesialisasi: "turun_bb",
         }),
@@ -138,6 +162,16 @@ async function runTests() {
       console.log(`create pt raw: [${res.status}] ${JSON.stringify(body)}`);
       check("create PT -> 201 + ptProfile", res.status === 201 && body.data.role === "pt" && body.data.ptProfile.nama === "PT Baru", body);
       createdPtUserId = body.data.id;
+
+      const expectedBase = (email.split("@")[0] || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, "")
+        .slice(0, 20);
+      check(
+        "username auto-generate dari prefix email",
+        typeof body.data.username === "string" && body.data.username.startsWith(expectedBase),
+        body.data.username
+      );
 
       const p = await db.query.ptProfiles.findFirst({ where: eq(ptProfiles.userId, createdPtUserId) });
       check("pt_profiles dibuat", p?.nama === "PT Baru", p?.nama);
@@ -149,16 +183,58 @@ async function runTests() {
 
       const login = await fetch(`${baseUrl}/auth/login`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailOrUsername: email, password: "password123" }),
+        body: JSON.stringify({ emailOrUsername: body.data.username, password: "password123" }),
       });
-      check("password yang diketik admin bisa login", login.status === 200, login.status);
+      check("login pakai username auto + password admin -> 200", login.status === 200, login.status);
+
+      const editUsername = await fetch(`${baseUrl}/admin/users/${createdPtUserId}`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({ username: "ubahusernamept" }),
+      });
+      console.log(`edit username PT raw: [${editUsername.status}] ${await editUsername.text()}`);
+      check("admin tidak bisa ubah username PT -> 400", editUsername.status === 400, editUsername.status);
+
+      const editPassword = await fetch(`${baseUrl}/admin/users/${createdPtUserId}`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({ password: "passwordBaru1" }),
+      });
+      check("admin tetap bisa ubah password PT -> 200", editPassword.status === 200, editPassword.status);
+
+      const loginNewPassword = await fetch(`${baseUrl}/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrUsername: body.data.username, password: "passwordBaru1" }),
+      });
+      check("login dengan password baru admin -> 200", loginNewPassword.status === 200, loginNewPassword.status);
 
       const dup = await fetch(`${baseUrl}/admin/users/pt`, {
         method: "POST", headers: admin.auth,
-        body: JSON.stringify({ nama: "PT Dup", email, username: uniq("dupuser"), password: "password123" }),
+        body: JSON.stringify({ nama: "PT Dup", email, password: "password123" }),
       });
       console.log(`create duplikat raw: [${dup.status}] ${await dup.text()}`);
       check("email duplikat -> 409", dup.status === 409, dup.status);
+
+      // Prefix email sama yang sudah dipakai username lain -> dapat suffix unik.
+      const takenBase = `taken${Date.now()}`;
+      await db.insert(users).values({
+        email: `occupant${Date.now()}@test.com`,
+        username: takenBase,
+        passwordHash: await argon2.hash("password123"),
+        role: "klien",
+      });
+      const takenEmail = `${takenBase}@test.com`;
+      const resTaken = await fetch(`${baseUrl}/admin/users/pt`, {
+        method: "POST", headers: admin.auth,
+        body: JSON.stringify({ nama: "PT Taken", email: takenEmail, password: "password123" }),
+      });
+      const bodyTaken = await resTaken.json();
+      check(
+        "username bentrok diberi angka unik",
+        resTaken.status === 201 &&
+          typeof bodyTaken.data.username === "string" &&
+          bodyTaken.data.username !== takenBase &&
+          bodyTaken.data.username.startsWith(takenBase),
+        bodyTaken.data?.username
+      );
     }
 
     console.log("\n=== TES PUT /admin/users/:id ===");
