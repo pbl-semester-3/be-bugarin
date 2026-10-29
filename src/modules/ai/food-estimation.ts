@@ -1,5 +1,6 @@
 import { SchemaType } from "@google/generative-ai";
 import { genAI } from "../../config/gemini";
+import { withTimeout } from "./with-timeout";
 
 const foodEstimationSchema = {
   type: SchemaType.OBJECT,
@@ -22,7 +23,11 @@ export async function estimateFoodCalories(
   });
 
   try {
-    const result = await model.generateContent(`Estimasi kalori per 100 gram untuk: ${namaMakanan}`);
+    const result = await withTimeout(
+      model.generateContent(`Estimasi kalori per 100 gram untuk: ${namaMakanan}`),
+      8000,
+      "AI food estimation"
+    );
     const parsed = JSON.parse(result.response.text()) as { kaloriPer100g: number; kategori: Kategori };
 
     // Validasi rentang wajar — WAJIB, jangan percaya angka mentah dari AI (mitigasi hallucination).

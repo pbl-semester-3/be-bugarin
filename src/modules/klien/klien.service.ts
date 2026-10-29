@@ -9,6 +9,7 @@ import { calculateTargetKalori } from "../../utils/kalori";
 import { getStartOfWeekUtc } from "../../utils/week";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 import { estimateFoodCalories } from "../ai/food-estimation";
+import { estimateActivityCalories } from "../ai/activity-estimation";
 import type { 
   UpdateProfileInput, 
   ChangePasswordInput, 
@@ -487,14 +488,68 @@ export const klienService = {
       throw new AppError(422, "Berat badan belum tercatat. Lengkapi profil terlebih dahulu.");
     }
 
-    const kaloriTerbakar = Math.round(olahraga.metValue * lastWeightLog.beratBadanKg * (data.durasiMenit / 60));
+    let durasiMenit: number;
+    let beratBebanKg: number | null = null;
+    let jumlahSet: number | null = null;
+    let repetisi: number | null = null;
+    let waktuIstirahatDetik: number | null = null;
+    let kaloriTerbakar: number;
+
+    if (olahraga.butuhBeban) {
+      beratBebanKg = data.beratBebanKg ?? null;
+      jumlahSet = data.jumlahSet ?? null;
+      repetisi = data.repetisi ?? null;
+      waktuIstirahatDetik = data.waktuIstirahatDetik ?? null;
+
+      if (
+        beratBebanKg == null || beratBebanKg <= 0 ||
+        jumlahSet == null || jumlahSet <= 0 ||
+        repetisi == null || repetisi <= 0 ||
+        waktuIstirahatDetik == null || waktuIstirahatDetik <= 0
+      ) {
+        throw new AppError(
+          400,
+          "Berat beban, set, repetisi, dan jeda istirahat wajib diisi untuk olahraga ini"
+        );
+      }
+
+      // Durasi dihitung otomatis: kerja (set x rep x tempo 3 dtk) + jeda antar set.
+      const durasiDetik =
+        jumlahSet * repetisi * 3 + (jumlahSet - 1) * waktuIstirahatDetik;
+      durasiMenit = Math.max(1, Math.round(durasiDetik / 60));
+
+      kaloriTerbakar = await estimateActivityCalories({
+        namaOlahraga: olahraga.nama,
+        metValue: olahraga.metValue,
+        beratBadanKg: lastWeightLog.beratBadanKg,
+        usia: profile.usia ?? null,
+        jenisKelamin: (profile.jenisKelamin as "pria" | "wanita" | null) ?? null,
+        tinggiBadanCm: profile.tinggiBadanCm ?? null,
+        durasiMenit,
+        beratBebanKg,
+        jumlahSet,
+        repetisi,
+        waktuIstirahatDetik,
+      });
+    } else {
+      if (!data.durasiMenit || data.durasiMenit <= 0) {
+        throw new AppError(400, "Durasi latihan wajib diisi");
+      }
+      durasiMenit = data.durasiMenit;
+      kaloriTerbakar = Math.round(olahraga.metValue * lastWeightLog.beratBadanKg * (durasiMenit / 60));
+    }
+
     const tanggal = new Date().toISOString().slice(0, 10);
 
     const [insertResult] = await db.insert(activityLogs).values({
       klienId: profile.id,
       olahragaId: olahraga.id,
-      durasiMenit: data.durasiMenit,
+      durasiMenit,
       jarakMeter,
+      beratBebanKg,
+      jumlahSet,
+      repetisi,
+      waktuIstirahatDetik,
       kaloriTerbakar,
       tanggal,
       weeklyPlanId: data.weeklyPlanId || null,
@@ -505,12 +560,48 @@ export const klienService = {
     return {
       id: insertResult.insertId,
       olahragaId: olahraga.id,
-      durasiMenit: data.durasiMenit,
+      durasiMenit,
       jarakMeter,
+      beratBebanKg,
+      jumlahSet,
+      repetisi,
+      waktuIstirahatDetik,
       kaloriTerbakar,
       tanggal,
       weeklyPlanId: data.weeklyPlanId || null,
     };
+  },
+
+  async getActivityLogs(userId: number, tanggal?: string) {
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, userId),
+    });
+    if (!profile) throw new AppError(404, "Profil tidak ditemukan");
+
+    const tgl =
+      tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal)
+        ? tanggal
+        : new Date().toISOString().slice(0, 10);
+
+    const rows = await db
+      .select()
+      .from(activityLogs)
+      .where(and(eq(activityLogs.klienId, profile.id), eq(activityLogs.tanggal, tgl)))
+      .orderBy(desc(activityLogs.id));
+
+    return rows.map((r) => ({
+      id: r.id,
+      olahragaId: r.olahragaId,
+      durasiMenit: r.durasiMenit,
+      jarakMeter: r.jarakMeter,
+      beratBebanKg: r.beratBebanKg,
+      jumlahSet: r.jumlahSet,
+      repetisi: r.repetisi,
+      waktuIstirahatDetik: r.waktuIstirahatDetik,
+      kaloriTerbakar: r.kaloriTerbakar,
+      tanggal: r.tanggal,
+      weeklyPlanId: r.weeklyPlanId,
+    }));
   },
 
   async createMealLog(userId: number, data: CreateMealLogInput) {
