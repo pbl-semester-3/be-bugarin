@@ -18,6 +18,7 @@ router.get("/riwayat", authGuard(["admin"]), adminController.getRiwayat);
 
 // Endpoint CRUD User
 router.get("/users", authGuard(["admin"]), adminController.listUsers);
+router.get("/users/:id", authGuard(["admin"]), adminController.getUserDetail);
 router.post("/users/pt", authGuard(["admin"]), adminController.createPt);
 router.put("/users/:id", authGuard(["admin"]), adminController.updateUser);
 router.delete("/users/:id", authGuard(["admin"]), adminController.deleteUser);
