@@ -57,16 +57,18 @@ async function runTests() {
     const authHeaders = { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
     const baseUrl = `http://localhost:${PORT}`;
 
-    // Pastikan ada olahraga jarak true & false
+    // Pastikan ada olahraga jarak true & false (cardio = bukan beban)
     let olahragaJarakTrue = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.butuhJarak, true) });
     if (!olahragaJarakTrue) {
-      const [res] = await db.insert(masterOlahraga).values({ nama: "Lari", metValue: 7.0, kategori: "kardio", butuhJarak: true });
+      const [res] = await db.insert(masterOlahraga).values({ nama: "Lari", metValue: 7.0, kategori: "kardio", butuhJarak: true, butuhBeban: false });
       olahragaJarakTrue = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.id, res.insertId) });
     }
-    
-    let olahragaJarakFalse = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.butuhJarak, false) });
+
+    let olahragaJarakFalse = await db.query.masterOlahraga.findFirst({
+      where: and(eq(masterOlahraga.butuhJarak, false), eq(masterOlahraga.butuhBeban, false)),
+    });
     if (!olahragaJarakFalse) {
-      const [res] = await db.insert(masterOlahraga).values({ nama: "Yoga", metValue: 3.0, kategori: "fleksibilitas", butuhJarak: false });
+      const [res] = await db.insert(masterOlahraga).values({ nama: "Yoga", metValue: 3.0, kategori: "fleksibilitas", butuhJarak: false, butuhBeban: false });
       olahragaJarakFalse = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.id, res.insertId) });
     }
 
@@ -98,6 +100,55 @@ async function runTests() {
       const expectedKalori = Math.round(olahragaJarakFalse!.metValue * bbTerkini * (45/60));
       console.log(`    DB Verifikasi Kalori: Expected=${expectedKalori}, Actual=${actLog1c?.kaloriTerbakar} (PASS: ${expectedKalori === actLog1c?.kaloriTerbakar})`);
     }
+
+    // --- TEST beban (Opsi C): durasi otomatis + kalori AI/fallback ---
+    let olahragaBeban = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.butuhBeban, true) });
+    if (!olahragaBeban) {
+      const [res] = await db.insert(masterOlahraga).values({
+        nama: "Beban Test", metValue: 4.0, kategori: "kekuatan", butuhJarak: false, butuhBeban: true,
+      });
+      olahragaBeban = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.id, res.insertId) });
+    }
+
+    const res1d = await fetch(`${baseUrl}/klien/activity-logs`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({
+        olahragaId: olahragaBeban!.id,
+        beratBebanKg: 60,
+        jumlahSet: 3,
+        repetisi: 10,
+        waktuIstirahatDetik: 90,
+      }),
+    });
+    const text1d = await res1d.text();
+    console.log(`1d (beban). [${res1d.status}] Response: ${text1d}`);
+    if (res1d.status === 201) {
+      const data1d = JSON.parse(text1d);
+      const expectedDurasi = Math.max(1, Math.round((3 * 10 * 3 + (3 - 1) * 90) / 60));
+      const okDurasi = data1d.data.durasiMenit === expectedDurasi;
+      const okKalori = data1d.data.kaloriTerbakar > 0;
+      const okFields =
+        data1d.data.beratBebanKg === 60 &&
+        data1d.data.jumlahSet === 3 &&
+        data1d.data.repetisi === 10 &&
+        data1d.data.waktuIstirahatDetik === 90;
+      console.log(`    Durasi otomatis: expected=${expectedDurasi}, actual=${data1d.data.durasiMenit} (PASS: ${okDurasi})`);
+      console.log(`    Kalori > 0: ${data1d.data.kaloriTerbakar} (PASS: ${okKalori})`);
+      console.log(`    Field beban ter-echo (PASS: ${okFields})`);
+
+      const actLog1d = await db.query.activityLogs.findFirst({ where: eq(activityLogs.id, data1d.data.id) });
+      console.log(`    DB Verifikasi beban: ${actLog1d?.beratBebanKg} kg x ${actLog1d?.repetisi} rep x ${actLog1d?.jumlahSet} set, jeda ${actLog1d?.waktuIstirahatDetik} dtk`);
+    } else {
+      console.log("    FAIL: seharusnya 201 untuk olahraga beban");
+    }
+
+    // --- TEST validasi: olahraga beban tanpa field beban harus 400 ---
+    const res1e = await fetch(`${baseUrl}/klien/activity-logs`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ olahragaId: olahragaBeban!.id, durasiMenit: 30 }),
+    });
+    console.log(`1e (beban tanpa field). [${res1e.status}] ${await res1e.text()}`);
+    console.log(`    Validasi 400: ${res1e.status === 400 ? "PASS" : "FAIL"}`);
 
     console.log("\n=== TEST 2: POST /klien/meal-logs ===");
     let makananMaster = await db.query.masterMakanan.findFirst();

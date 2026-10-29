@@ -134,6 +134,18 @@ export const klienController = {
     }
   },
 
+  async getActivityLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+      const tanggal = typeof req.query.tanggal === "string" ? req.query.tanggal : undefined;
+      const data = await klienService.getActivityLogs(userId, tanggal);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async createMealLog(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard

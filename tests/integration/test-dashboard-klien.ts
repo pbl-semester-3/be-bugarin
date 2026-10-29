@@ -25,7 +25,7 @@ import {
   masterMakanan,
   feedbacks,
 } from "../../src/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { env } from "../../src/config/env";
 import * as argon2 from "argon2";
@@ -126,9 +126,11 @@ async function runTests() {
     const D4 = shiftUtcDate(today, -4);
     const D5 = shiftUtcDate(today, -5);
 
-    let olahraga = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.butuhJarak, false) });
+    let olahraga = await db.query.masterOlahraga.findFirst({
+      where: and(eq(masterOlahraga.butuhJarak, false), eq(masterOlahraga.butuhBeban, false)),
+    });
     if (!olahraga) {
-      const ins = await db.insert(masterOlahraga).values({ nama: uniq("Yoga"), metValue: 3, kategori: "fleksibilitas", butuhJarak: false });
+      const ins = await db.insert(masterOlahraga).values({ nama: uniq("Yoga"), metValue: 3, kategori: "fleksibilitas", butuhJarak: false, butuhBeban: false });
       olahraga = await db.query.masterOlahraga.findFirst({ where: eq(masterOlahraga.id, ins[0].insertId) });
     }
     let makanan = await db.query.masterMakanan.findFirst();

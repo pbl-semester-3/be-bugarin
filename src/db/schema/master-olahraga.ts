@@ -8,6 +8,8 @@ export const masterOlahraga = mysqlTable("master_olahraga", {
   kategori: mysqlEnum("kategori", ["kardio", "kekuatan", "fleksibilitas"]).notNull(),
   // Menentukan apakah field jarak tampil di form Progres — data-driven, bukan hardcode di frontend.
   butuhJarak: boolean("butuh_jarak").notNull().default(false),
+  // Menentukan apakah field latihan beban (beban/set/repetisi/jeda) tampil — untuk angkat beban.
+  butuhBeban: boolean("butuh_beban").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

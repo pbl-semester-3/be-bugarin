@@ -12,7 +12,12 @@ export const activityLogs = mysqlTable("activity_logs", {
   olahragaId: int("olahraga_id").notNull().references(() => masterOlahraga.id),
   durasiMenit: int("durasi_menit").notNull(),
   jarakMeter: float("jarak_meter"), // hanya diisi kalau master_olahraga.butuh_jarak = true
-  // Snapshot hasil rumus MET saat insert — TIDAK dihitung ulang saat dibaca (lihat drizzle-mysql-patterns).
+  // Field khusus latihan beban (master_olahraga.butuh_beban = true). Null untuk olahraga lain.
+  beratBebanKg: float("berat_beban_kg"),
+  jumlahSet: int("jumlah_set"),
+  repetisi: int("repetisi"),
+  waktuIstirahatDetik: int("waktu_istirahat_detik"),
+  // Snapshot hasil rumus/AI saat insert — TIDAK dihitung ulang saat dibaca (lihat drizzle-mysql-patterns).
   kaloriTerbakar: int("kalori_terbakar").notNull(),
   tanggal: date("tanggal", { mode: "string" }).notNull(),
 }, (table) => ({
