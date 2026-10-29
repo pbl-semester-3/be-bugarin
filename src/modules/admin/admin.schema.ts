@@ -3,9 +3,17 @@ import { z } from "zod";
 // Admin boleh mengubah email & username miliknya sendiri (beda dari PT).
 // .strict(): tolak field tak dikenal.
 export const updateAdminProfileSchema = z.object({
+  namaDepan: z.string().min(1, "Nama depan tidak boleh kosong").max(50).optional(),
+  namaBelakang: z.string().min(1, "Nama belakang tidak boleh kosong").max(50).optional(),
   nama: z.string().min(1, "Nama tidak boleh kosong").optional(),
   email: z.string().email("Format email tidak valid").optional(),
   username: z.string().min(3, "Username minimal 3 karakter").max(50).optional(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9]{8,15}$/, "Format telepon hanya '+' dan angka")
+    .optional(),
+  bio: z.string().max(1000, "Biografi maksimal 1000 karakter").optional(),
 }).strict();
 
 export const changeAdminPasswordSchema = z.object({

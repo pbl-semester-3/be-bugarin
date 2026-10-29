@@ -64,6 +64,20 @@
       "when": 1793030524644,
       "tag": "0008_nervous_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1793188223506,
+      "tag": "0009_cloudy_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1793270692511,
+      "tag": "0010_silky_cloak",
+      "breakpoints": true
     }
   ]
 }

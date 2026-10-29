@@ -36,8 +36,14 @@ export type NewCycleInput = z.infer<typeof newCycleSchema>;
 
 export const createActivityLogSchema = z.object({
   olahragaId: z.number().int().positive("Olahraga ID harus positif"),
-  durasiMenit: z.number().int().positive("Durasi menit harus positif"),
+  // Wajib untuk olahraga non-beban; untuk olahraga beban dihitung otomatis di service.
+  durasiMenit: z.number().int().positive("Durasi menit harus positif").optional(),
   jarakMeter: z.number().positive("Jarak harus positif").optional(),
+  // Field khusus latihan beban (wajib bila master_olahraga.butuh_beban = true).
+  beratBebanKg: z.number().positive("Berat beban harus positif").optional(),
+  jumlahSet: z.number().int().positive("Jumlah set harus positif").optional(),
+  repetisi: z.number().int().positive("Repetisi harus positif").optional(),
+  waktuIstirahatDetik: z.number().int().positive("Jeda istirahat harus lebih dari 0").optional(),
   weeklyPlanId: z.number().int().positive().optional(),
 });
 

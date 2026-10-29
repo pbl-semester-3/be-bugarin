@@ -21,6 +21,7 @@ router.get("/progress-cycles/:id/logs", authGuard(["klien"]), klienController.ge
 
 // Endpoint Progres Klien
 router.post("/activity-logs", authGuard(["klien"]), klienController.createActivityLog);
+router.get("/activity-logs", authGuard(["klien"]), klienController.getActivityLogs);
 router.post("/meal-logs", authGuard(["klien"]), klienController.createMealLog);
 router.post("/meal-logs/estimate", authGuard(["klien"]), klienController.estimateMeal);
 router.get("/weekly-plan/current", authGuard(["klien"]), klienController.getCurrentWeeklyPlan);

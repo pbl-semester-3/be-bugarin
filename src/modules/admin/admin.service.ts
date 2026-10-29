@@ -102,12 +102,24 @@ async function buildUserItem(userId: number) {
 }
 
 // Identitas admin: resolve admin_profiles dari users.id (req.user.id).
+function splitNama(nama: string) {
+  const parts = nama.trim().split(/\s+/);
+  return {
+    depan: parts[0] ?? "",
+    belakang: parts.slice(1).join(" "),
+  };
+}
+
 async function buildAdminProfile(userId: number) {
   const profile = await db.query.adminProfiles.findFirst({
     where: eq(adminProfiles.userId, userId),
     with: { user: true },
   });
   if (!profile) throw new AppError(404, "Profil Admin tidak ditemukan");
+
+  const fallback = splitNama(profile.nama);
+  const namaDepan = profile.namaDepan ?? fallback.depan;
+  const namaBelakang = profile.namaBelakang ?? fallback.belakang;
 
   return {
     user: {
@@ -118,7 +130,13 @@ async function buildAdminProfile(userId: number) {
     },
     profile: {
       nama: profile.nama,
+      namaDepan,
+      namaBelakang,
+      phone: profile.phone ?? "",
+      bio: profile.bio ?? "",
+      fotoUrl: null,
     },
+    updatedAt: profile.user.updatedAt,
   };
 }
 
@@ -137,14 +155,33 @@ export const adminService = {
     if (data.email !== undefined) userSet.email = data.email;
     if (data.username !== undefined) userSet.username = data.username;
 
+    const profileSet: Partial<typeof adminProfiles.$inferInsert> = {};
+    if (data.namaDepan !== undefined || data.namaBelakang !== undefined) {
+      const fallback = splitNama(profile.nama);
+      const depan = data.namaDepan ?? profile.namaDepan ?? fallback.depan;
+      const belakang =
+        data.namaBelakang ?? profile.namaBelakang ?? fallback.belakang;
+      profileSet.namaDepan = depan;
+      profileSet.namaBelakang = belakang;
+      profileSet.nama = `${depan} ${belakang}`.trim();
+    } else if (data.nama !== undefined) {
+      const split = splitNama(data.nama);
+      profileSet.nama = data.nama;
+      profileSet.namaDepan = split.depan;
+      profileSet.namaBelakang = split.belakang;
+    }
+    if (data.phone !== undefined) profileSet.phone = data.phone;
+    if (data.bio !== undefined) profileSet.bio = data.bio;
+
     try {
       await db.transaction(async (tx) => {
         if (Object.keys(userSet).length > 0) {
           await tx.update(users).set(userSet).where(eq(users.id, userId));
         }
-        if (data.nama !== undefined) {
-          await tx.update(adminProfiles)
-            .set({ nama: data.nama })
+        if (Object.keys(profileSet).length > 0) {
+          await tx
+            .update(adminProfiles)
+            .set(profileSet)
             .where(eq(adminProfiles.id, profile.id));
         }
       });
@@ -273,6 +310,75 @@ export const adminService = {
             fotoUrl: buildCloudinaryUrl(p.fotoPublicId),
           },
         })),
+    };
+  },
+
+  async getKlienDetailForAdmin(targetId: number) {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, targetId),
+    });
+    if (!user || user.role !== "klien" || user.deletedAt) {
+      throw new AppError(404, "Klien tidak ditemukan");
+    }
+
+    const profile = await db.query.klienProfiles.findFirst({
+      where: eq(klienProfiles.userId, targetId),
+      with: {
+        pt: true,
+        progressCycles: {
+          where: eq(progressCycles.status, "aktif"),
+          orderBy: [desc(progressCycles.tanggalMulai)],
+          limit: 1,
+        },
+      },
+    });
+    if (!profile) throw new AppError(404, "Klien tidak ditemukan");
+
+    const cycle = profile.progressCycles[0] ?? null;
+    const logs = await db.query.weightLogs.findMany({
+      where: eq(weightLogs.klienId, profile.id),
+      orderBy: [desc(weightLogs.tanggal), desc(weightLogs.id)],
+    });
+    const latestWeight = logs[0]?.beratBadanKg;
+
+    return {
+      data: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        isActive: user.isActive,
+        klienProfile: {
+          nama: profile.nama,
+          usia: profile.usia,
+          jenisKelamin: profile.jenisKelamin,
+          tinggiBadanCm: profile.tinggiBadanCm,
+          alergiMakanan: profile.alergiMakanan,
+          ptId: profile.ptId,
+          ptNama: profile.pt?.nama ?? null,
+          fotoUrl: buildCloudinaryUrl(profile.fotoPublicId),
+          tujuan: cycle?.tujuan ?? null,
+          progress: calculateWeightProgress(cycle, latestWeight),
+        },
+        activeCycle: cycle
+          ? {
+              id: cycle.id,
+              bbAwalKg: cycle.bbAwalKg,
+              bbTujuanKg: cycle.bbTujuanKg,
+              tujuan: cycle.tujuan,
+              durasiHari: cycle.durasiHari,
+              targetKaloriPerHari: cycle.targetKaloriPerHari,
+              streak: cycle.streak,
+              status: cycle.status,
+              tanggalMulai: cycle.tanggalMulai,
+            }
+          : null,
+        bbSekarangKg: latestWeight ?? null,
+        weightLogs: logs.map((log) => ({
+          id: log.id,
+          beratBadanKg: log.beratBadanKg,
+          tanggal: log.tanggal,
+        })),
+      },
     };
   },
 

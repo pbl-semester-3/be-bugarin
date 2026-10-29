@@ -12,14 +12,14 @@ import * as argon2 from "argon2";
 // Nilai MET (Metabolic Equivalent of Task) berikut adalah estimasi umum dari referensi
 // kesehatan publik yang dikenal luas — cocok untuk kalkulasi kalori perkiraan di MVP
 const olahragaSeed = [
-  { nama: "Jalan Kaki", metValue: 3.5, kategori: "kardio" as const, butuhJarak: true },
-  { nama: "Lari / Jogging", metValue: 8.0, kategori: "kardio" as const, butuhJarak: true },
-  { nama: "Bersepeda", metValue: 6.0, kategori: "kardio" as const, butuhJarak: true },
-  { nama: "Renang", metValue: 6.0, kategori: "kardio" as const, butuhJarak: true },
-  { nama: "Upper Body (Angkat Beban)", metValue: 4.0, kategori: "kekuatan" as const, butuhJarak: false },
-  { nama: "Lower Body (Angkat Beban)", metValue: 4.0, kategori: "kekuatan" as const, butuhJarak: false },
-  { nama: "HIIT", metValue: 8.0, kategori: "kardio" as const, butuhJarak: false },
-  { nama: "Yoga", metValue: 2.5, kategori: "fleksibilitas" as const, butuhJarak: false },
+  { nama: "Jalan Kaki", metValue: 3.5, kategori: "kardio" as const, butuhJarak: true, butuhBeban: false },
+  { nama: "Lari / Jogging", metValue: 8.0, kategori: "kardio" as const, butuhJarak: true, butuhBeban: false },
+  { nama: "Bersepeda", metValue: 6.0, kategori: "kardio" as const, butuhJarak: true, butuhBeban: false },
+  { nama: "Renang", metValue: 6.0, kategori: "kardio" as const, butuhJarak: true, butuhBeban: false },
+  { nama: "Upper Body (Angkat Beban)", metValue: 4.0, kategori: "kekuatan" as const, butuhJarak: false, butuhBeban: true },
+  { nama: "Lower Body (Angkat Beban)", metValue: 4.0, kategori: "kekuatan" as const, butuhJarak: false, butuhBeban: true },
+  { nama: "HIIT", metValue: 8.0, kategori: "kardio" as const, butuhJarak: false, butuhBeban: false },
+  { nama: "Yoga", metValue: 2.5, kategori: "fleksibilitas" as const, butuhJarak: false, butuhBeban: false },
 ];
 
 // Estimasi kalori per 100g — starting point, akan bertambah dinamis dari input klien
