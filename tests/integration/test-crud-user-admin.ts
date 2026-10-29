@@ -97,6 +97,43 @@ async function runTests() {
     console.log("\n=== SETUP ===");
     const admin = await createAdmin("crud");
 
+    console.log("\n=== TES PROFIL ADMIN ===");
+    {
+      const get = await fetch(`${baseUrl}/admin/profile`, { headers: admin.auth });
+      const getBody = await get.json();
+      check(
+        "profil admin: field lengkap",
+        get.status === 200 &&
+          typeof getBody.data.profile.namaDepan === "string" &&
+          typeof getBody.data.profile.namaBelakang === "string" &&
+          typeof getBody.data.profile.phone === "string" &&
+          typeof getBody.data.profile.bio === "string" &&
+          typeof getBody.data.updatedAt === "string",
+        getBody
+      );
+
+      const put = await fetch(`${baseUrl}/admin/profile`, {
+        method: "PUT", headers: admin.auth,
+        body: JSON.stringify({
+          namaDepan: "Alexandra",
+          namaBelakang: "Daniswara",
+          phone: "+6281299081120",
+          bio: "Penanggung jawab operasional.",
+        }),
+      });
+      const putBody = await put.json();
+      check(
+        "profil admin: update nama/phone/bio",
+        put.status === 200 &&
+          putBody.data.profile.nama === "Alexandra Daniswara" &&
+          putBody.data.profile.namaDepan === "Alexandra" &&
+          putBody.data.profile.namaBelakang === "Daniswara" &&
+          putBody.data.profile.phone === "+6281299081120" &&
+          putBody.data.profile.bio === "Penanggung jawab operasional.",
+        putBody
+      );
+    }
+
     console.log("\n=== TES GET /admin/users ===");
     {
       const noRole = await fetch(`${baseUrl}/admin/users`, { headers: admin.auth });
@@ -144,6 +181,23 @@ async function runTests() {
         itemP
       );
       check("pt: fotoUrl key ada (null tanpa foto)", itemP?.ptProfile && "fotoUrl" in itemP.ptProfile, itemP?.ptProfile);
+
+      const detail = await fetch(`${baseUrl}/admin/users/${klienA.userId}`, { headers: admin.auth });
+      const detailBody = await detail.json();
+      check(
+        "detail klien admin: profil, PT, siklus, weight log",
+        detail.status === 200 &&
+          detailBody.data.klienProfile.ptNama === "PT listA" &&
+          detailBody.data.klienProfile.progress === 20 &&
+          detailBody.data.activeCycle?.tujuan === "turun_bb" &&
+          detailBody.data.bbSekarangKg === 78 &&
+          Array.isArray(detailBody.data.weightLogs) &&
+          detailBody.data.weightLogs.length === 2,
+        detailBody
+      );
+
+      const detailPt = await fetch(`${baseUrl}/admin/users/${ptA.userId}`, { headers: admin.auth });
+      check("detail user non-klien -> 404", detailPt.status === 404, detailPt.status);
     }
 
     console.log("\n=== TES POST /admin/users/pt ===");

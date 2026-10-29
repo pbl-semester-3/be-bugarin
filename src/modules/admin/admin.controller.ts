@@ -88,6 +88,19 @@ export const adminController = {
     }
   },
 
+  async getUserDetail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const param = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!param.success) {
+        return res.status(400).json({ error: "ID user tidak valid" });
+      }
+      const response = await adminService.getKlienDetailForAdmin(param.data);
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async createPt(req: Request, res: Response, next: NextFunction) {
     try {
       // @ts-expect-error req.user is injected by authGuard
