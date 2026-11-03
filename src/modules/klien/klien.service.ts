@@ -21,7 +21,7 @@ import type {
 } from "./klien.schema";
 
 export type DashboardSummary = {
-  pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null } | null;
+  pt: { id: number; nama: string; spesialisasi: "turun_bb" | "naik_bb" | null; fotoUrl: string | null } | null;
   targetKaloriHariIni: number | null;
   kaloriMasukHariIni: number | null;
   streak: number;
@@ -713,7 +713,12 @@ export const klienService = {
       : false;
 
     const pt = profile.ptId && profile.pt
-      ? { id: profile.pt.id, nama: profile.pt.nama, spesialisasi: profile.pt.spesialisasi }
+      ? {
+          id: profile.pt.id,
+          nama: profile.pt.nama,
+          spesialisasi: profile.pt.spesialisasi,
+          fotoUrl: buildCloudinaryUrl(profile.pt.fotoPublicId),
+        }
       : null;
 
     return {
@@ -799,6 +804,7 @@ export const klienService = {
         nama: request.pt.nama,
         spesialisasi: request.pt.spesialisasi,
         tempatGym: request.pt.tempatGym,
+        fotoUrl: buildCloudinaryUrl(request.pt.fotoPublicId),
       }
     };
   },
