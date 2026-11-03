@@ -174,6 +174,16 @@ async function resolveMakanan(data: {
   throw new AppError(400, "Harus mengirim makananId atau namaMakanan");
 }
 
+// Ringkasan PT untuk response (id, nama, foto). Dipakai agar semua endpoint
+// yang menampilkan PT konsisten menyertakan foto profil.
+function mapPtSummary(
+  pt: { id: number; nama: string; fotoPublicId: string | null } | null | undefined
+) {
+  return pt
+    ? { id: pt.id, nama: pt.nama, fotoUrl: buildCloudinaryUrl(pt.fotoPublicId) }
+    : null;
+}
+
 export const klienService = {
   async getProfile(klienId: number) {
     const profile = await db.query.klienProfiles.findFirst({
@@ -907,10 +917,7 @@ export const klienService = {
         balasanKlien: f.balasanKlien,
         dibaca: f.dibaca,
         createdAt: f.createdAt,
-        pt: f.source === "ai" ? null : (f.pt ? {
-          id: f.pt.id,
-          nama: f.pt.nama,
-        } : null),
+        pt: f.source === "ai" ? null : mapPtSummary(f.pt),
       })),
       meta: { total: result.length }
     };
@@ -959,10 +966,7 @@ export const klienService = {
         balasanKlien: updated!.balasanKlien,
         dibaca: updated!.dibaca,
         createdAt: updated!.createdAt,
-        pt: updated!.source === "ai" ? null : (updated!.pt ? {
-          id: updated!.pt.id,
-          nama: updated!.pt.nama,
-        } : null),
+        pt: updated!.source === "ai" ? null : mapPtSummary(updated!.pt),
       }
     };
   },
@@ -1002,10 +1006,7 @@ export const klienService = {
         balasanKlien: updated!.balasanKlien,
         dibaca: updated!.dibaca,
         createdAt: updated!.createdAt,
-        pt: updated!.source === "ai" ? null : (updated!.pt ? {
-          id: updated!.pt.id,
-          nama: updated!.pt.nama,
-        } : null),
+        pt: updated!.source === "ai" ? null : mapPtSummary(updated!.pt),
       }
     };
   }
