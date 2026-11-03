@@ -511,6 +511,7 @@ export const ptService = {
         nama: ptProfiles.nama,
         spesialisasi: ptProfiles.spesialisasi,
         tempatGym: ptProfiles.tempatGym,
+        fotoPublicId: ptProfiles.fotoPublicId,
       })
       .from(ptProfiles)
       .innerJoin(users, eq(ptProfiles.userId, users.id))
@@ -521,6 +522,7 @@ export const ptService = {
       nama: pt.nama,
       spesialisasi: pt.spesialisasi,
       tempatGym: pt.tempatGym!,
+      fotoUrl: buildCloudinaryUrl(pt.fotoPublicId),
     }));
   },
 
