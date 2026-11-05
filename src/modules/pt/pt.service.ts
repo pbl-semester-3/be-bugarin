@@ -15,6 +15,7 @@ export type DashboardSummaryPT = {
   jadwalLatihan: {
     klienId: number;
     namaKlien: string;
+    fotoUrl: string | null;
     hari: string;
     jam: string;
     jenis: string;
@@ -185,7 +186,7 @@ export const ptService = {
 
     const rows = await db.query.klienProfiles.findMany({
       where: eq(klienProfiles.ptId, ptProfileId),
-      columns: { id: true, nama: true },
+      columns: { id: true, nama: true, fotoPublicId: true },
       with: {
         progressCycles: {
           where: eq(progressCycles.status, "aktif"),
@@ -202,6 +203,7 @@ export const ptService = {
         return {
           id: k.id,
           nama: k.nama,
+          fotoUrl: buildCloudinaryUrl(k.fotoPublicId),
           tujuan: cycle ? cycle.tujuan : null,
           durasiHari: cycle ? cycle.durasiHari : null,
         };
@@ -227,6 +229,7 @@ export const ptService = {
       profil: {
         id: klien.id,
         nama: klien.nama,
+        fotoUrl: buildCloudinaryUrl(klien.fotoPublicId),
         usia: klien.usia,
         jenisKelamin: klien.jenisKelamin,
         tinggiBadanCm: klien.tinggiBadanCm,
@@ -342,7 +345,7 @@ export const ptService = {
 
     const klienList = await db.query.klienProfiles.findMany({
       where: eq(klienProfiles.ptId, ptProfile.id),
-      columns: { id: true, nama: true },
+      columns: { id: true, nama: true, fotoPublicId: true },
     });
 
     if (klienList.length === 0) {
@@ -359,7 +362,12 @@ export const ptService = {
       orderBy: [desc(weeklyPlans.generatedAt)],
     });
 
-    const klienNameById = new Map(klienList.map((k) => [k.id, k.nama]));
+    const klienById = new Map(
+      klienList.map((k) => [
+        k.id,
+        { nama: k.nama, fotoUrl: buildCloudinaryUrl(k.fotoPublicId) },
+      ]),
+    );
     const seenKlien = new Set<number>();
     const lokasi = ptProfile.tempatGym ?? "-";
 
@@ -369,13 +377,14 @@ export const ptService = {
       if (seenKlien.has(plan.klienId)) continue;
       seenKlien.add(plan.klienId);
 
-      const namaKlien = klienNameById.get(plan.klienId);
-      if (!namaKlien) continue;
+      const klien = klienById.get(plan.klienId);
+      if (!klien) continue;
 
       for (const item of plan.workoutPlan) {
         jadwalLatihan.push({
           klienId: plan.klienId,
-          namaKlien,
+          namaKlien: klien.nama,
+          fotoUrl: klien.fotoUrl,
           hari: normalizeHari(item.hari),
           jam: normalizeJam(item.jam),
           jenis: item.jenis,
@@ -397,7 +406,7 @@ export const ptService = {
 
     const klienList = await db.query.klienProfiles.findMany({
       where: eq(klienProfiles.ptId, ptProfileId),
-      columns: { id: true, nama: true, usia: true, jenisKelamin: true },
+      columns: { id: true, nama: true, usia: true, jenisKelamin: true, fotoPublicId: true },
       orderBy: [asc(klienProfiles.nama)],
     });
 
@@ -457,6 +466,7 @@ export const ptService = {
       return {
         id: k.id,
         nama: k.nama,
+        fotoUrl: buildCloudinaryUrl(k.fotoPublicId),
         usia: k.usia,
         jenisKelamin: k.jenisKelamin,
         bbAwalKg: bbAwalByKlien.get(k.id) ?? null,
@@ -559,6 +569,7 @@ export const ptService = {
       klien: {
         id: req.klien.id,
         nama: req.klien.nama,
+        fotoUrl: buildCloudinaryUrl(req.klien.fotoPublicId),
         tujuan: req.klien.progressCycles.length > 0 ? req.klien.progressCycles[0].tujuan : null,
       }
     }));
