@@ -15,6 +15,7 @@ export const requestId: RequestHandler = (req, res, next) => {
   const id = incoming && VALID_INCOMING_ID.test(incoming) ? incoming : randomUUID();
 
   req.id = id;
+  req.startedAt = Date.now();
   res.setHeader("x-request-id", id);
 
   res.on("finish", () => {

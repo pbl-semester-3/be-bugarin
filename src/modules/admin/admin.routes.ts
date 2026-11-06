@@ -15,6 +15,7 @@ router.get("/dashboard-summary", authGuard(["admin"]), adminController.getDashbo
 
 // Endpoint Riwayat Admin
 router.get("/riwayat", authGuard(["admin"]), adminController.getRiwayat);
+router.get("/request-logs", authGuard(["admin"]), adminController.listRequestLogs);
 
 // Endpoint CRUD User
 router.get("/users", authGuard(["admin"]), adminController.listUsers);

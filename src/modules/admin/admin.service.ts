@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, isNotNull, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNotNull, inArray, or, like, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { db } from "../../config/db";
 import {
@@ -11,6 +11,7 @@ import {
   pairingRequests,
   adminActivityLogs,
   feedbacks,
+  requestLogs,
 } from "../../db/schema";
 import { AppError } from "../../middlewares/error-handler";
 import { buildCloudinaryUrl } from "../../config/cloudinary";
@@ -23,6 +24,7 @@ import type {
   CreatePtInput,
   UpdateUserInput,
   GetRiwayatQueryInput,
+  GetRequestLogsQueryInput,
 } from "./admin.schema";
 
 function asDuplicateError(error: unknown): unknown {
@@ -778,6 +780,71 @@ export const adminService = {
       meta: {
         feedbackLogs: { total: feedbackTotal, page, hasMore: page * limit < feedbackTotal },
         adminActivityLogs: { total: adminLogTotal, page, hasMore: page * limit < adminLogTotal },
+      },
+    };
+  },
+
+  async getRequestLogs(query: GetRequestLogsQueryInput) {
+    const { page, limit, status, role, q } = query;
+    const offset = (page - 1) * limit;
+
+    const filters: SQL[] = [];
+    if (status !== undefined) filters.push(eq(requestLogs.status, status));
+    if (role !== undefined) filters.push(eq(requestLogs.role, role));
+    if (q) {
+      const keyword = `%${q}%`;
+      filters.push(
+        or(
+          like(requestLogs.endpoint, keyword),
+          like(requestLogs.message, keyword),
+          like(requestLogs.requestId, keyword),
+        )!,
+      );
+    }
+    const where = filters.length > 0 ? and(...filters) : undefined;
+
+    const [rows, countRows] = await Promise.all([
+      db
+        .select({
+          id: requestLogs.id,
+          requestId: requestLogs.requestId,
+          userId: requestLogs.userId,
+          role: requestLogs.role,
+          method: requestLogs.method,
+          endpoint: requestLogs.endpoint,
+          status: requestLogs.status,
+          message: requestLogs.message,
+          durationMs: requestLogs.durationMs,
+          createdAt: requestLogs.createdAt,
+        })
+        .from(requestLogs)
+        .where(where)
+        .orderBy(desc(requestLogs.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: sql<string>`COUNT(*)` }).from(requestLogs).where(where),
+    ]);
+
+    const total = Number(countRows[0]?.total ?? 0);
+    return {
+      data: rows.map((r) => ({
+        id: r.id,
+        requestId: r.requestId,
+        userId: r.userId ?? null,
+        role: r.role ?? null,
+        method: r.method,
+        endpoint: r.endpoint,
+        status: r.status,
+        message: r.message ?? null,
+        durationMs: r.durationMs ?? null,
+        createdAt: r.createdAt,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        hasMore: page * limit < total,
       },
     };
   },
