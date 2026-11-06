@@ -76,3 +76,13 @@ export const getRiwayatQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100, "Limit maksimal 100").default(50),
 });
 export type GetRiwayatQueryInput = z.infer<typeof getRiwayatQuerySchema>;
+
+// Query untuk tab "Request Log" (error log) di Riwayat Admin.
+export const getRequestLogsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100, "Limit maksimal 100").default(20),
+  status: z.coerce.number().int().min(100).max(599).optional(),
+  role: z.enum(["klien", "pt", "admin"]).optional(),
+  q: z.string().trim().max(100).optional(),
+});
+export type GetRequestLogsQueryInput = z.infer<typeof getRequestLogsQuerySchema>;

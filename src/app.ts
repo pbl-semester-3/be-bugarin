@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 
 import { env } from "./config/env";
 import { errorHandler } from "./middlewares/error-handler";
+import { requestId } from "./middlewares/request-id";
 
 import authRoutes from "./modules/auth/auth.routes";
 import klienRoutes from "./modules/klien/klien.routes";
@@ -20,6 +21,9 @@ export function createApp() {
   // Di belakang reverse proxy (Render) — agar IP/protokol benar & rate-limit tidak warning.
   app.set("trust proxy", 1);
 
+  // Request ID paling awal: semua respons dapat header x-request-id.
+  app.use(requestId);
+
   app.use(helmet());
   app.use(express.json());
   app.use(cookieParser());
@@ -27,6 +31,7 @@ export function createApp() {
     cors({
       origin: env.webOrigins, // daftar origin dari WEB_ORIGIN (boleh dipisah koma)
       credentials: true,
+      exposedHeaders: ["x-request-id"], // agar FE/mobile bisa membaca ID dari respons
     })
   );
 

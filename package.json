@@ -21,7 +21,8 @@
     "db:clean-demo": "tsx db/clean-demo.ts",
     "db:backfill-streak": "tsx scripts/backfill-streak.ts",
     "db:normalize-weekly-plan": "tsx scripts/normalize-weekly-plan.ts",
-    "schema:export": "tsx scripts/export-schema-contract.ts"
+    "schema:export": "tsx scripts/export-schema-contract.ts",
+    "db:prune-request-logs": "tsx scripts/prune-request-logs.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
