@@ -715,7 +715,9 @@ export const adminService = {
         .select({
           id: feedbacks.id,
           namaPt: ptProfiles.nama,
+          ptFotoPublicId: ptProfiles.fotoPublicId,
           namaKlien: klienProfiles.nama,
+          klienFotoPublicId: klienProfiles.fotoPublicId,
           pesan: feedbacks.pesan,
           createdAt: feedbacks.createdAt,
         })
@@ -732,6 +734,7 @@ export const adminService = {
           id: adminActivityLogs.id,
           namaAdmin: adminProfiles.nama,
           namaTargetUser: sql<string | null>`COALESCE(${klienProfiles.nama}, ${ptProfiles.nama})`,
+          targetFotoPublicId: sql<string | null>`COALESCE(${klienProfiles.fotoPublicId}, ${ptProfiles.fotoPublicId})`,
           aksi: adminActivityLogs.aksi,
           createdAt: adminActivityLogs.createdAt,
         })
@@ -757,7 +760,9 @@ export const adminService = {
         feedbackLogs: feedbackRows.map((r) => ({
           id: r.id,
           namaPt: r.namaPt,
+          fotoPt: buildCloudinaryUrl(r.ptFotoPublicId),
           namaKlien: r.namaKlien,
+          fotoKlien: buildCloudinaryUrl(r.klienFotoPublicId),
           pesan: r.pesan,
           createdAt: r.createdAt,
         })),
@@ -765,6 +770,7 @@ export const adminService = {
           id: r.id,
           namaAdmin: r.namaAdmin,
           namaTargetUser: r.namaTargetUser ?? null,
+          fotoTargetUser: buildCloudinaryUrl(r.targetFotoPublicId),
           aksi: r.aksi,
           createdAt: r.createdAt,
         })),
