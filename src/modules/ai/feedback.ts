@@ -1,5 +1,5 @@
 import { SchemaType } from "@google/generative-ai";
-import { genAI } from "../../config/gemini";
+import { genAI, GEMINI_MODEL } from "../../config/gemini";
 
 const feedbackSchema = {
   type: SchemaType.OBJECT,
@@ -20,7 +20,7 @@ export interface WeeklyFeedbackContext {
 
 export async function generateWeeklyFeedback(context: WeeklyFeedbackContext): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-flash-latest",
+      model: GEMINI_MODEL,
     systemInstruction:
       "Kamu adalah AI health coach yang suportif dan observatif. " +
       "Maksimal 2 kalimat. Konteksnya adalah rekap performa mingguan. " +

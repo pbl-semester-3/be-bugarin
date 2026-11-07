@@ -10,6 +10,7 @@ hanya placeholder di `.env.example`.
 | `DATABASE_URL` | Connection string Aiven: `mysql://user:pass@host:port/db?ssl-mode=REQUIRED` |
 | `JWT_SECRET` | String acak ≥ 32 karakter (`openssl rand -base64 32`) |
 | `GEMINI_API_KEY` | Dari https://aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Opsional. Default `gemini-3.8-flash`. Jangan pakai `gemini-flash-latest` (sempat 503/lambat → timeout). |
 | `CRON_SECRET` | String acak; dipakai header `x-cron-secret` pada `/internal/jobs/*` |
 | `WEB_ORIGIN` | Origin FE yang boleh akses API (CORS). **Boleh beberapa, dipisah koma.** Contoh: `https://bugarin.my.id` |
 | `NODE_ENV` | `production` |

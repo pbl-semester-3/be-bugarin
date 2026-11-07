@@ -1,5 +1,5 @@
 import { SchemaType } from "@google/generative-ai";
-import { genAI } from "../../config/gemini";
+import { genAI, GEMINI_MODEL } from "../../config/gemini";
 import { withTimeout } from "./with-timeout";
 
 const activityEstimationSchema = {
@@ -41,7 +41,7 @@ export async function estimateActivityCalories(
 ): Promise<number> {
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-flash-latest",
+      model: GEMINI_MODEL,
       systemInstruction:
         "Kamu adalah asisten kebugaran yang mengestimasi kalori terbakar dari sesi latihan beban. " +
         "Gunakan data berat badan, durasi, beban, jumlah set, repetisi, dan jeda istirahat " +
