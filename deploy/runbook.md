@@ -64,9 +64,22 @@ DATABASE_URL="<connection-string-aiven>" npm run db:seed
 
 ## 8. Cron mingguan — cron-job.org
 
-- Buat job: `POST https://api.bugarin.my.id/internal/jobs/generate-weekly-plan`
-- Header: `x-cron-secret: <CRON_SECRET>`
-- Jadwal: setiap **Senin 00:00**.
+Fitur AI Weekly Plan butuh pemicu mingguan (tidak ada penjadwal di dalam app).
+
+- **URL**: `https://api.bugarin.my.id/internal/jobs/generate-weekly-plan`
+- **Method**: `POST` (bukan GET — GET akan 404)
+- **Header**: `x-cron-secret: <CRON_SECRET>`
+- **Jadwal**: setiap **Senin 00:00**, timezone **Asia/Jakarta**
+
+Test aman: isi secret **salah** dulu → harus **401** (memastikan route + method benar).
+Dengan secret benar → `200 {"data":{"triggered":true,"count":N}}` dan job benar-benar jalan.
+
+Parameter opsional:
+- `?limit=N` — batasi jumlah klien per trigger (default 3, maks 50) agar tidak timeout.
+- `?klienId=ID` — proses satu klien saja (backfill/demo).
+
+> Catatan pengembangan (bukan untuk demo): ganti generate "fire-and-forget" menjadi
+> `waitUntil` (Vercel) dan jadikan job bertahap/robust (cursor + retry + observability).
 
 ## 9. Verifikasi
 

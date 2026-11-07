@@ -1,5 +1,5 @@
 import { SchemaType } from "@google/generative-ai";
-import { genAI } from "../../config/gemini";
+import { genAI, GEMINI_MODEL } from "../../config/gemini";
 import { withTimeout } from "./with-timeout";
 
 const foodEstimationSchema = {
@@ -17,7 +17,7 @@ export async function estimateFoodCalories(
   namaMakanan: string
 ): Promise<{ kaloriPer100g: number; kategori: Kategori }> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-flash-latest",
+      model: GEMINI_MODEL,
     systemInstruction: "Kamu adalah asisten estimasi nilai gizi makanan Indonesia.",
     generationConfig: { responseMimeType: "application/json", responseSchema: foodEstimationSchema },
   });

@@ -619,38 +619,39 @@ export const ptService = {
           .where(eq(klienProfiles.id, request.klienId));
       });
 
-      // Fire and forget AI and save to DB
-      (async () => {
-        try {
-          const klienProf = await db.query.klienProfiles.findFirst({
-            where: eq(klienProfiles.id, request.klienId),
-          });
-          const cycle = await db.query.progressCycles.findFirst({
+      // A1: generate plan DITUNGGU (dengan timeout) agar pasti tersimpan sebelum respons.
+      // Jika AI gagal/timeout, penerimaan klien tetap sukses; plan bisa menyusul lewat job.
+      try {
+        const klienProf = await db.query.klienProfiles.findFirst({
+          where: eq(klienProfiles.id, request.klienId),
+        });
+        const cycle = await db.query.progressCycles.findFirst({
+          where: and(
+            eq(progressCycles.klienId, request.klienId),
+            eq(progressCycles.status, "aktif")
+          ),
+        });
+        if (klienProf && cycle && ptProfile.tempatGym) {
+          const startOfWeek = getStartOfWeekUtc();
+
+          const existingPlan = await db.query.weeklyPlans.findFirst({
             where: and(
-              eq(progressCycles.klienId, request.klienId),
-              eq(progressCycles.status, "aktif")
+              eq(weeklyPlans.klienId, request.klienId),
+              eq(weeklyPlans.mingguMulai, startOfWeek),
             ),
           });
-          if (klienProf && cycle && ptProfile.tempatGym) {
+
+          if (!existingPlan) {
+            // generateWeeklyPlan sudah punya timeout + fallback deterministik di dalamnya.
             const planResult = await generateWeeklyPlan({
               tinggiBadanCm: klienProf.tinggiBadanCm ?? null,
               alergiMakanan: klienProf.alergiMakanan ?? null,
               bbAwalKg: cycle.bbAwalKg,
-              bbSekarangKg: cycle.bbAwalKg, // we could fetch weightLogs, but let's just use bbAwalKg for first plan
+              bbSekarangKg: cycle.bbAwalKg,
               bbTujuanKg: cycle.bbTujuanKg,
               tujuan: cycle.tujuan,
               tempatGym: ptProfile.tempatGym,
             });
-            
-            const startOfWeek = getStartOfWeekUtc();
-
-            const existingPlan = await db.query.weeklyPlans.findFirst({
-              where: and(
-                eq(weeklyPlans.klienId, request.klienId),
-                eq(weeklyPlans.mingguMulai, startOfWeek),
-              ),
-            });
-            if (existingPlan) return;
 
             await db.insert(weeklyPlans).values({
               klienId: request.klienId,
@@ -660,10 +661,10 @@ export const ptService = {
               status: "pending_review",
             });
           }
-        } catch (err) {
-          console.error("Failed to generate weekly plan for new pairing:", err);
         }
-      })();
+      } catch (err) {
+        console.error("Failed to generate weekly plan for new pairing:", err);
+      }
 
       return { id: requestId, status: "diterima" };
     }
