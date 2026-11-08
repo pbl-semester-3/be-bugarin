@@ -6,6 +6,8 @@ import { cloudinary, isCloudinaryConfigured, buildCloudinaryUrl } from "../../co
 import { env } from "../../config/env";
 import { getStartOfWeekUtc } from "../../utils/week";
 import { normalizeHari, normalizeJam, getDayOrder } from "../../utils/day";
+import { findConflicts } from "../../utils/schedule";
+import { getOccupiedWorkoutSlots, getOtherClientPlans } from "../../utils/schedule-data";
 import { generateWeeklyPlan } from "../ai/weekly-plan";
 import * as argon2 from "argon2";
 import type { UpdatePtProfileInput, ChangePtPasswordInput, ChangePtThemeInput, OverridePlanInput } from "./pt.schema";
@@ -255,12 +257,16 @@ export const ptService = {
     });
     if (!plan) return null;
 
+    const otherPlans = await getOtherClientPlans(ptProfileId, plan.mingguMulai, klien.id);
+    const conflicts = findConflicts(plan.workoutPlan, otherPlans);
+
     return {
       id: plan.id,
       mingguMulai: plan.mingguMulai,
       status: plan.status,
       workoutPlan: plan.workoutPlan,
       mealPlan: plan.mealPlan,
+      conflicts,
     };
   },
 
@@ -270,6 +276,16 @@ export const ptService = {
 
     if (plan.status !== "pending_review") {
       throw new AppError(400, "Plan sudah disetujui atau dioverride sebelumnya");
+    }
+
+    // Jangan izinkan approve bila masih bentrok dengan klien lain (atau dalam plan).
+    const otherPlans = await getOtherClientPlans(ptProfileId, plan.mingguMulai, plan.klienId);
+    const conflicts = findConflicts(plan.workoutPlan, otherPlans);
+    if (conflicts.length > 0) {
+      throw new AppError(
+        409,
+        "Jadwal bentrok dengan klien lain. Sesuaikan lewat Override terlebih dahulu.",
+      );
     }
 
     await db.update(weeklyPlans)
@@ -282,6 +298,16 @@ export const ptService = {
   async overrideWeeklyPlan(ptUserId: number, planId: number, data: OverridePlanInput) {
     const ptProfileId = await resolvePtProfileId(ptUserId);
     const plan = await getOwnedPlan(ptProfileId, planId);
+
+    // Tolak override bila bentrok dengan klien lain atau sesi lain dalam plan ini.
+    const otherPlans = await getOtherClientPlans(ptProfileId, plan.mingguMulai, plan.klienId);
+    const conflicts = findConflicts(data.workoutPlan, otherPlans);
+    if (conflicts.length > 0) {
+      throw new AppError(
+        409,
+        "Jadwal bentrok dengan klien lain atau sesi lain di plan ini. Perbaiki hari/jam terlebih dahulu.",
+      );
+    }
 
     const ptProfile = await db.query.ptProfiles.findFirst({
       where: eq(ptProfiles.id, ptProfileId),
@@ -305,6 +331,17 @@ export const ptService = {
       workoutPlan,
       mealPlan: data.mealPlan,
     };
+  },
+
+  async checkWeeklyPlanConflicts(
+    ptUserId: number,
+    planId: number,
+    workoutPlan: Array<{ hari: string; jam: string; jenis: string }>,
+  ) {
+    const ptProfileId = await resolvePtProfileId(ptUserId);
+    const plan = await getOwnedPlan(ptProfileId, planId);
+    const otherPlans = await getOtherClientPlans(ptProfileId, plan.mingguMulai, plan.klienId);
+    return findConflicts(workoutPlan, otherPlans);
   },
 
   async createFeedback(ptUserId: number, klienId: number, pesan: string) {
@@ -642,6 +679,13 @@ export const ptService = {
           });
 
           if (!existingPlan) {
+            // Hindari bentrok dengan jadwal klien lain PT ini (semua status, agar tidak duplikat).
+            const occupiedSlots = await getOccupiedWorkoutSlots(
+              ptProfile.id,
+              startOfWeek,
+              request.klienId,
+            );
+
             // generateWeeklyPlan sudah punya timeout + fallback deterministik di dalamnya.
             const planResult = await generateWeeklyPlan({
               tinggiBadanCm: klienProf.tinggiBadanCm ?? null,
@@ -651,6 +695,8 @@ export const ptService = {
               bbTujuanKg: cycle.bbTujuanKg,
               tujuan: cycle.tujuan,
               tempatGym: ptProfile.tempatGym,
+              occupiedSlots,
+              seed: request.klienId,
             });
 
             await db.insert(weeklyPlans).values({
