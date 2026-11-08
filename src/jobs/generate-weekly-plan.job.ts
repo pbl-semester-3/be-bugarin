@@ -2,6 +2,7 @@ import { and, eq, isNotNull, desc } from "drizzle-orm";
 import { db } from "../config/db";
 import { klienProfiles, progressCycles, ptProfiles, weightLogs, weeklyPlans } from "../db/schema";
 import { generateWeeklyPlan } from "../modules/ai/weekly-plan";
+import { getOccupiedWorkoutSlots } from "../utils/schedule-data";
 import { getStartOfWeekUtc } from "../utils/week";
 
 type GenerateOptions = {
@@ -57,6 +58,9 @@ export async function generateWeeklyPlanForAllActiveKlien(options: GenerateOptio
     attempts += 1;
 
     try {
+      // Hindari bentrok dengan klien lain PT ini (termasuk plan yang baru dibuat di run ini).
+      const occupiedSlots = await getOccupiedWorkoutSlots(pt.id, startOfWeek, klien.id);
+
       // generateWeeklyPlan sudah punya timeout + fallback deterministik di dalamnya.
       const plan = await generateWeeklyPlan({
         tinggiBadanCm: klien.tinggiBadanCm,
@@ -66,6 +70,8 @@ export async function generateWeeklyPlanForAllActiveKlien(options: GenerateOptio
         bbTujuanKg: cycle.bbTujuanKg,
         tujuan: cycle.tujuan,
         tempatGym: pt.tempatGym,
+        occupiedSlots,
+        seed: klien.id,
       });
 
       await db.insert(weeklyPlans).values({

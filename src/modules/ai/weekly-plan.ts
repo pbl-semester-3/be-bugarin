@@ -1,6 +1,14 @@
 import { SchemaType } from "@google/generative-ai";
 import { genAI, GEMINI_MODEL } from "../../config/gemini";
 import { withTimeout } from "./with-timeout";
+import { normalizeHari } from "../../utils/day";
+import {
+  DEFAULT_DURATION_MIN,
+  formatRange,
+  hasTimeConflict,
+  parseTimeRange,
+  pickFreeSlots,
+} from "../../utils/schedule";
 import type { WorkoutPlanItem, MealPlanItem } from "../../db/schema/weekly-plans";
 
 const weeklyPlanSchema = {
@@ -39,7 +47,7 @@ type GeneratedPlan = {
   mealPlan: MealPlanItem[];
 };
 
-type WeeklyPlanInput = {
+export type WeeklyPlanInput = {
   tinggiBadanCm: number | null;
   alergiMakanan: string | null;
   bbAwalKg: number;
@@ -47,19 +55,26 @@ type WeeklyPlanInput = {
   bbTujuanKg: number;
   tujuan: "turun_bb" | "naik_bb";
   tempatGym: string; // disisipkan ke hasil setelah parse, TIDAK diminta ke AI
+  // Slot klien lain pada PT yang sama (untuk menghindari jadwal bentrok).
+  occupiedSlots?: Array<{ hari: string; jam: string }>;
+  // Variasi deterministik (mis. klienId) agar jadwal antar klien berbeda.
+  seed?: number;
 };
 
 export type WeeklyPlanResult = { workoutPlan: WorkoutPlanItem[]; mealPlan: MealPlanItem[] };
 
-// AI bisa 503/lambat (pernah >50s). Batasi; jika lewat → pakai fallback deterministik.
+// AI bisa 503/lambat (pernah >50s). Batasi; jika lewat -> fallback deterministik.
 const AI_TIMEOUT_MS = 15_000;
 
 async function generateWithAI(input: WeeklyPlanInput): Promise<WeeklyPlanResult> {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction:
-      "Kamu adalah asisten perencana program kebugaran. Susun jadwal latihan 2-3 hari/minggu " +
-      "dan rencana makan harian. JANGAN sarankan makanan yang mengandung alergi yang disebutkan.",
+      "Kamu adalah asisten perencana program kebugaran. Susun 2-3 sesi latihan/minggu, " +
+      "tiap sesi 90 menit, format jam 'HH:MM - HH:MM', hari dan jam bervariasi, jam wajar " +
+      "06:00-21:00 pada hari Senin-Sabtu. JANGAN memakai slot yang sudah terpakai " +
+      "(lihat slotTerpakai). Susun juga rencana makan harian. JANGAN sarankan makanan yang " +
+      "mengandung alergi yang disebutkan.",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: weeklyPlanSchema,
@@ -74,7 +89,8 @@ async function generateWithAI(input: WeeklyPlanInput): Promise<WeeklyPlanResult>
       bbSekarangKg: input.bbSekarangKg,
       bbTujuanKg: input.bbTujuanKg,
       tujuan: input.tujuan,
-    })
+      slotTerpakai: input.occupiedSlots ?? [],
+    }),
   );
 
   const parsed = JSON.parse(result.response.text()) as GeneratedPlan;
@@ -86,16 +102,16 @@ async function generateWithAI(input: WeeklyPlanInput): Promise<WeeklyPlanResult>
   };
 }
 
-const FALLBACK_WORKOUT: Record<"turun_bb" | "naik_bb", Array<{ hari: string; jam: string; jenis: string }>> = {
+const FALLBACK_JENIS: Record<"turun_bb" | "naik_bb", string[]> = {
   turun_bb: [
-    { hari: "Senin", jam: "07:00 - 08:00", jenis: "Kardio (jalan cepat/bersepeda) + peregangan" },
-    { hari: "Rabu", jam: "07:00 - 08:00", jenis: "Latihan kekuatan ringan seluruh tubuh" },
-    { hari: "Jumat", jam: "07:00 - 08:00", jenis: "Kardio interval ringan + latihan core" },
+    "Kardio (jalan cepat/bersepeda) + peregangan",
+    "Latihan kekuatan ringan seluruh tubuh",
+    "Kardio interval ringan + latihan core",
   ],
   naik_bb: [
-    { hari: "Senin", jam: "17:00 - 18:00", jenis: "Latihan beban upper body" },
-    { hari: "Rabu", jam: "17:00 - 18:00", jenis: "Latihan beban lower body" },
-    { hari: "Jumat", jam: "17:00 - 18:00", jenis: "Latihan beban full body" },
+    "Latihan beban upper body",
+    "Latihan beban lower body",
+    "Latihan beban full body",
   ],
 };
 
@@ -115,30 +131,87 @@ const FALLBACK_MEAL: Record<"turun_bb" | "naik_bb", MealPlanItem[]> = {
 };
 
 /**
- * Plan cadangan deterministik (tanpa AI): dipakai bila Gemini gagal/timeout agar fitur
- * tetap menghasilkan jadwal. PT tetap me-review/override, termasuk untuk alergi.
+ * Plan cadangan deterministik (tanpa AI): pilih slot bebas 90 menit (06:00-21:00,
+ * Senin-Sabtu) yang divariasikan berdasarkan `seed` agar antar klien berbeda hari/jam.
+ * Jika slot habis, sesi dikurangi (lebih baik sedikit tetapi tidak bentrok).
  */
 export function buildFallbackWeeklyPlan(input: {
   tujuan: "turun_bb" | "naik_bb";
   tempatGym: string;
+  occupiedSlots?: Array<{ hari: string; jam: string }>;
+  seed?: number;
 }): WeeklyPlanResult {
+  const slots = pickFreeSlots(input.occupiedSlots ?? [], 3, input.seed ?? 0);
+  const jenisList = FALLBACK_JENIS[input.tujuan];
+
   return {
-    workoutPlan: FALLBACK_WORKOUT[input.tujuan].map((item) => ({
-      ...item,
+    workoutPlan: slots.map((slot, index) => ({
+      hari: slot.hari,
+      jam: slot.jam,
+      jenis: jenisList[index % jenisList.length],
       lokasi: input.tempatGym,
     })),
     mealPlan: FALLBACK_MEAL[input.tujuan].map((item) => ({ ...item })),
   };
 }
 
+// Pastikan hasil AI tidak bentrok: geser ke slot bebas, atau buang sesi bila penuh.
+function resolveWorkoutConflicts(
+  items: WorkoutPlanItem[],
+  occupied: Array<{ hari: string; jam: string }>,
+  seed: number,
+): WorkoutPlanItem[] {
+  const result: WorkoutPlanItem[] = [];
+  let reserved = [...occupied];
+
+  items.forEach((item, index) => {
+    const day = normalizeHari(item.hari);
+    const range = parseTimeRange(item.jam, DEFAULT_DURATION_MIN);
+
+    if (range && !hasTimeConflict(day, range, reserved, DEFAULT_DURATION_MIN)) {
+      const normalized = {
+        hari: day,
+        jam: formatRange(range),
+        jenis: item.jenis,
+        lokasi: item.lokasi,
+      };
+      result.push(normalized);
+      reserved = [...reserved, { hari: normalized.hari, jam: normalized.jam }];
+      return;
+    }
+
+    const free = pickFreeSlots(reserved, 1, seed + index);
+    if (free.length > 0) {
+      const slot = free[0];
+      result.push({ hari: slot.hari, jam: slot.jam, jenis: item.jenis, lokasi: item.lokasi });
+      reserved = [...reserved, slot];
+    }
+    // Jika tidak ada slot bebas: sesi dibuang (Opsi A).
+  });
+
+  return result;
+}
+
 export async function generateWeeklyPlan(input: WeeklyPlanInput): Promise<WeeklyPlanResult> {
+  const occupied = input.occupiedSlots ?? [];
+  const seed = input.seed ?? 0;
+
+  let base: WeeklyPlanResult;
   try {
-    return await withTimeout(generateWithAI(input), AI_TIMEOUT_MS, "generateWeeklyPlan");
+    base = await withTimeout(generateWithAI(input), AI_TIMEOUT_MS, "generateWeeklyPlan");
+    if (base.workoutPlan.length === 0) {
+      base = buildFallbackWeeklyPlan({ ...input, occupiedSlots: occupied, seed });
+    }
   } catch (err) {
     console.error(
       "generateWeeklyPlan: AI gagal/timeout, memakai fallback:",
-      (err as Error).message
+      (err as Error).message,
     );
-    return buildFallbackWeeklyPlan(input);
+    base = buildFallbackWeeklyPlan({ ...input, occupiedSlots: occupied, seed });
   }
+
+  return {
+    workoutPlan: resolveWorkoutConflicts(base.workoutPlan, occupied, seed),
+    mealPlan: base.mealPlan,
+  };
 }

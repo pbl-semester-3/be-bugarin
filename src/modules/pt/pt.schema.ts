@@ -58,3 +58,16 @@ export const createFeedbackSchema = z.object({
 });
 
 export type CreateFeedbackInput = z.infer<typeof createFeedbackSchema>;
+
+// Body untuk cek bentrok sebelum override (hanya workoutPlan; meal tidak memakai slot waktu).
+export const checkWeeklyPlanConflictsSchema = z.object({
+  workoutPlan: z.array(
+    z.object({
+      hari: z.string().min(1, "Hari tidak boleh kosong"),
+      jam: z.string().min(1, "Jam tidak boleh kosong"),
+      jenis: z.string().min(1, "Jenis tidak boleh kosong"),
+    }).strict(),
+  ).min(1, "Workout plan minimal 1 jadwal"),
+});
+
+export type CheckWeeklyPlanConflictsInput = z.infer<typeof checkWeeklyPlanConflictsSchema>;

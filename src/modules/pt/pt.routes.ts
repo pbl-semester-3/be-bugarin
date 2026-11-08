@@ -22,6 +22,7 @@ router.get("/klien/:id", authGuard(["pt"]), ptController.getKlienDetail);
 router.get("/klien/:id/weekly-plan", authGuard(["pt"]), ptController.getKlienWeeklyPlan);
 router.put("/weekly-plan/:id/approve", authGuard(["pt"]), ptController.approveWeeklyPlan);
 router.put("/weekly-plan/:id/override", authGuard(["pt"]), ptController.overrideWeeklyPlan);
+router.post("/weekly-plan/:id/check-conflicts", authGuard(["pt"]), ptController.checkWeeklyPlanConflicts);
 
 // Endpoint Feedback PT ke Klien
 router.post("/klien/:id/feedbacks", authGuard(["pt"]), ptController.createFeedback);
