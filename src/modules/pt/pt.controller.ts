@@ -7,6 +7,7 @@ import {
   changePtPasswordSchema,
   changePtThemeSchema,
   overridePlanSchema,
+  checkWeeklyPlanConflictsSchema,
   createFeedbackSchema,
 } from "./pt.schema";
 
@@ -133,6 +134,28 @@ export const ptController = {
       const parsedData = overridePlanSchema.parse(req.body);
       const data = await ptService.overrideWeeklyPlan(userId, paramResult.data, parsedData);
       res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async checkWeeklyPlanConflicts(req: Request, res: Response, next: NextFunction) {
+    try {
+      // @ts-expect-error req.user is injected by authGuard
+      const userId = req.user.id;
+
+      const paramResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      if (!paramResult.success) {
+        return res.status(400).json({ error: "ID plan tidak valid" });
+      }
+
+      const parsedData = checkWeeklyPlanConflictsSchema.parse(req.body);
+      const conflicts = await ptService.checkWeeklyPlanConflicts(
+        userId,
+        paramResult.data,
+        parsedData.workoutPlan,
+      );
+      res.json({ data: { conflicts } });
     } catch (error) {
       next(error);
     }
