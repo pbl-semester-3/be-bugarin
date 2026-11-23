@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, desc } from "drizzle-orm";
+import { and, eq, isNotNull, desc, sql } from "drizzle-orm";
 import { db } from "../config/db";
 import { klienProfiles, progressCycles, ptProfiles, weightLogs, weeklyPlans } from "../db/schema";
 import { generateWeeklyPlan } from "../modules/ai/weekly-plan";
@@ -12,23 +12,81 @@ type GenerateOptions = {
   klienId?: number;
 };
 
+type GenerateResult = {
+  count: number;
+  remaining: number;
+  total: number;
+};
+
 // Dipanggil oleh: endpoint /internal/jobs/generate-weekly-plan (cron-job.org di production).
-export async function generateWeeklyPlanForAllActiveKlien(options: GenerateOptions = {}) {
+export async function generateWeeklyPlanForAllActiveKlien(
+  options: GenerateOptions = {},
+): Promise<GenerateResult> {
   const { limit, klienId } = options;
   const startOfWeek = getStartOfWeekUtc();
 
-  const filters = [isNotNull(klienProfiles.ptId)];
-  if (klienId !== undefined) filters.push(eq(klienProfiles.id, klienId));
+  const where =
+    klienId !== undefined
+      ? and(isNotNull(klienProfiles.ptId), eq(klienProfiles.id, klienId))
+      : isNotNull(klienProfiles.ptId);
 
-  const klienList = await db
-    .select()
-    .from(klienProfiles)
-    .where(and(...filters));
+  // Hanya klien aktif (bukan suspended/soft-deleted) yang perlu dibuatkan plan.
+  const klienRows = await db.query.klienProfiles.findMany({
+    where,
+    with: {
+      user: {
+        columns: { isActive: true, deletedAt: true },
+      },
+    },
+  });
+  const klienList = klienRows.filter(
+    (klien) => klien.user?.isActive && !klien.user?.deletedAt,
+  );
+
+  // Klien yang sudah punya plan minggu ini dilewati. Dicatat sekali agar urutan
+  // proses bisa memprioritaskan klien yang belum kebagian.
+  const existingPlansThisWeek = await db
+    .select({ klienId: weeklyPlans.klienId })
+    .from(weeklyPlans)
+    .where(eq(weeklyPlans.mingguMulai, startOfWeek));
+  const plannedKlienIds = new Set(existingPlansThisWeek.map((row) => row.klienId));
+
+  // Waktu generate terakhir per klien, untuk rotasi yang adil antar-minggu.
+  const lastPlanRows = await db
+    .select({
+      klienId: weeklyPlans.klienId,
+      lastGeneratedAt: sql<Date | string>`MAX(${weeklyPlans.generatedAt})`,
+    })
+    .from(weeklyPlans)
+    .groupBy(weeklyPlans.klienId);
+  const lastGeneratedByKlien = new Map(
+    lastPlanRows.map((row) => [row.klienId, row.lastGeneratedAt]),
+  );
+
+  const lastGeneratedMs = (klienProfileId: number) => {
+    const value = lastGeneratedByKlien.get(klienProfileId);
+    if (!value) return 0;
+    const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
+  // Prioritas: belum punya plan minggu ini -> yang paling lama tidak digenerate -> id.
+  // Tanpa urutan eksplisit, klien ber-ID besar (mis. data demo) selalu terakhir dan
+  // tidak pernah tercapai saat `limit` kecil.
+  const orderedKlien = [...klienList].sort((a, b) => {
+    const aPlanned = plannedKlienIds.has(a.id) ? 1 : 0;
+    const bPlanned = plannedKlienIds.has(b.id) ? 1 : 0;
+    if (aPlanned !== bPlanned) return aPlanned - bPlanned;
+
+    const byLastGenerated = lastGeneratedMs(a.id) - lastGeneratedMs(b.id);
+    return byLastGenerated !== 0 ? byLastGenerated : a.id - b.id;
+  });
 
   let count = 0;
   let attempts = 0;
+  let skipped = 0;
 
-  for (const klien of klienList) {
+  for (const klien of orderedKlien) {
     if (limit !== undefined && attempts >= limit) break;
 
     const [cycle] = await db
@@ -36,10 +94,17 @@ export async function generateWeeklyPlanForAllActiveKlien(options: GenerateOptio
       .from(progressCycles)
       .where(and(eq(progressCycles.klienId, klien.id), eq(progressCycles.status, "aktif")))
       .limit(1);
-    if (!cycle || !klien.ptId) continue;
+    if (!cycle || !klien.ptId) {
+      skipped += 1;
+      continue;
+    }
 
     const [pt] = await db.select().from(ptProfiles).where(eq(ptProfiles.id, klien.ptId)).limit(1);
-    if (!pt?.tempatGym) continue; // PT belum lengkapi profil, skip dulu
+    if (!pt?.tempatGym) {
+      // PT belum lengkapi profil, skip dulu.
+      skipped += 1;
+      continue;
+    }
 
     const existingPlan = await db
       .select()
@@ -88,8 +153,12 @@ export async function generateWeeklyPlanForAllActiveKlien(options: GenerateOptio
     }
   }
 
+  const unplannedCount = klienList.filter((klien) => !plannedKlienIds.has(klien.id)).length;
+  const remaining = Math.max(0, unplannedCount - count - skipped);
+
   console.log(
-    `generateWeeklyPlanForAllActiveKlien: ${count} plan digenerate (attempts ${attempts})`
+    `generateWeeklyPlanForAllActiveKlien: ${count} plan digenerate, ${remaining} tersisa ` +
+      `(attempts ${attempts}, total ${klienList.length})`,
   );
-  return count;
+  return { count, remaining, total: klienList.length };
 }
