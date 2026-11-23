@@ -70,9 +70,13 @@ Fitur AI Weekly Plan butuh pemicu mingguan (tidak ada penjadwal di dalam app).
 - **Method**: `POST` (bukan GET — GET akan 404)
 - **Header**: `x-cron-secret: <CRON_SECRET>`
 - **Jadwal**: setiap **Senin 00:00**, timezone **Asia/Jakarta**
+- **Cakupan**: default **3 klien per trigger**. Jika total klien > 3, tambahkan beberapa
+  jadwal (mis. setiap 5 menit selama 30 menit) atau naikkan `?limit` secara hati-hati.
+  Job memprioritaskan klien yang **belum punya plan minggu ini**, lalu yang paling lama
+  tidak digenerate — jadi trigger berulang akan menuntaskan sisanya tanpa mengulang klien.
 
 Test aman: isi secret **salah** dulu → harus **401** (memastikan route + method benar).
-Dengan secret benar → `200 {"data":{"triggered":true,"count":N}}` dan job benar-benar jalan.
+Dengan secret benar → `200 {"data":{"triggered":true,"count":N,"remaining":R,"total":T}}`.
 
 Parameter opsional:
 - `?limit=N` — batasi jumlah klien per trigger (default 3, maks 50) agar tidak timeout.
