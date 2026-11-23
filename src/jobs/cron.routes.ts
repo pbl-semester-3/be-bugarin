@@ -27,8 +27,8 @@ router.post(
     // Default 1 bila menargetkan satu klien; selain itu 3 (aman: 3 x timeout AI 15s < 60s).
     const limit = Math.min(limitParam ?? (klienId !== undefined ? 1 : 3), 50);
 
-    const count = await generateWeeklyPlanForAllActiveKlien({ limit, klienId });
-    res.json({ data: { triggered: true, count } });
+    const result = await generateWeeklyPlanForAllActiveKlien({ limit, klienId });
+    res.json({ data: { triggered: true, ...result } });
   })
 );
 
